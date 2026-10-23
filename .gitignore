@@ -1,0 +1,29 @@
+# dependencias
+node_modules
+
+# next.js
+.next
+out
+next-env.d.ts
+
+# produccion
+build
+
+# variables de entorno (nunca subir las claves)
+.env
+.env*.local
+
+# vercel
+.vercel
+
+# sistema
+.DS_Store
+*.pem
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# typescript
+*.tsbuildinfo
