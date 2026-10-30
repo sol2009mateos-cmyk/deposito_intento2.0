@@ -11,6 +11,7 @@ const links: { href: string; label: string; icon: string; roles: Rol[] }[] = [
   { href: '/', label: 'Inicio', icon: '📊', roles: ['admin', 'supervisor', 'operario'] },
   { href: '/inventario', label: 'Inventario', icon: '📦', roles: ['admin', 'supervisor', 'operario'] },
   { href: '/historial', label: 'Historial', icon: '🕘', roles: ['admin', 'supervisor', 'operario'] },
+  { href: '/proveedores', label: 'Proveedores', icon: '🚚', roles: ['admin', 'supervisor'] },
   { href: '/usuarios', label: 'Usuarios', icon: '🔑', roles: ['admin'] },
 ]
 
