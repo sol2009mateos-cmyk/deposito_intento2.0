@@ -215,6 +215,11 @@ export default function ProveedoresView({ proveedores, catalogo, productos }: Pr
                               {producto.codigo}
                             </span>
                           )}
+                          {producto.unidades_por_bulto > 1 && (
+                            <span className="block text-gray-500 text-xs">
+                              Bulto de {producto.unidades_por_bulto} u
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 text-gray-300">
                           {formatearPesos(item.precio)}{' '}
