@@ -29,6 +29,9 @@ export default function PrecioCatalogoModal({
 
   const [busqueda, setBusqueda] = useState('')
   const [productoId, setProductoId] = useState(editar?.producto.id ?? '')
+  const [unidadesTexto, setUnidadesTexto] = useState(
+    String(editar?.producto.unidades_por_bulto ?? 1)
+  )
   const [precioTexto, setPrecioTexto] = useState(
     editar ? String(editar.item.precio).replace('.', ',') : ''
   )
@@ -50,19 +53,35 @@ export default function PrecioCatalogoModal({
     ? editar.producto
     : disponibles.find((p) => p.id === productoId) ?? null
 
-  const usaBultos = (producto?.unidades_por_bulto ?? 1) > 1
+  const unidadesNum = parseInt(unidadesTexto, 10)
+  const unidadesValidas = !Number.isNaN(unidadesNum) && unidadesNum >= 1
+  const porBultoNum = unidadesValidas ? unidadesNum : 1
+  const usaBultos = porBultoNum > 1
   const precio = parsearPrecio(precioTexto)
+
+  // Al elegir un producto nuevo, se carga solo las unidades por bulto que ya tiene.
+  function elegirProducto(id: string) {
+    setProductoId(id)
+    const elegido = disponibles.find((p) => p.id === id)
+    if (!elegido) return
+    setUnidadesTexto(String(elegido.unidades_por_bulto))
+    if (elegido.unidades_por_bulto <= 1) setPorBulto(false)
+  }
+
+  function cambiarUnidades(texto: string) {
+    setUnidadesTexto(texto)
+    const numero = parseInt(texto, 10)
+    if (Number.isNaN(numero) || numero <= 1) setPorBulto(false)
+  }
 
   let aclaracion = ''
   if (producto && precio !== null && usaBultos) {
     if (porBulto) {
-      aclaracion = `Equivale a ${formatearPesos(
-        precio / producto.unidades_por_bulto
-      )} por unidad.`
+      aclaracion = `Equivale a ${formatearPesos(precio / porBultoNum)} por unidad.`
     } else {
       aclaracion = `Equivale a ${formatearPesos(
-        precio * producto.unidades_por_bulto
-      )} por bulto de ${producto.unidades_por_bulto} unidades.`
+        precio * porBultoNum
+      )} por bulto de ${porBultoNum} unidades.`
     }
   }
 
@@ -72,6 +91,10 @@ export default function PrecioCatalogoModal({
 
     if (!producto) {
       setErrorMsg('Elegí un producto')
+      return
+    }
+    if (!unidadesValidas) {
+      setErrorMsg('Las unidades por bulto tienen que ser 1 o más')
       return
     }
     if (precio === null || precio <= 0) {
@@ -87,6 +110,7 @@ export default function PrecioCatalogoModal({
       p_producto_id: producto.id,
       p_precio: precio,
       p_por_bulto: usaBultos ? porBulto : false,
+      p_unidades_por_bulto: unidadesNum,
     })
 
     setGuardando(false)
@@ -125,7 +149,7 @@ export default function PrecioCatalogoModal({
             />
             <select
               value={productoId}
-              onChange={(e) => setProductoId(e.target.value)}
+              onChange={(e) => elegirProducto(e.target.value)}
               required
               className={`${inputClass} mb-4`}
             >
@@ -143,6 +167,21 @@ export default function PrecioCatalogoModal({
             </select>
           </>
         )}
+
+        <label className="block text-gray-400 text-sm mb-1">
+          Unidades por bulto
+        </label>
+        <input
+          type="number"
+          min={1}
+          value={unidadesTexto}
+          onChange={(e) => cambiarUnidades(e.target.value)}
+          required
+          className={`${inputClass} mb-1`}
+        />
+        <p className="text-gray-600 text-xs mb-4">
+          Cuántas unidades trae un bulto de este producto. Si no viene en bultos, dejá 1.
+        </p>
 
         <label className="block text-gray-400 text-sm mb-1">Precio en pesos</label>
         <input
