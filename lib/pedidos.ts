@@ -1,4 +1,4 @@
-export type EstadoPedido = 'borrador' | 'pendiente' | 'cancelado'
+export type EstadoPedido = 'borrador' | 'pendiente' | 'recibido' | 'cancelado'
 
 export type Pedido = {
   id: string
@@ -23,12 +23,14 @@ export type ItemPedido = {
 export const NOMBRE_ESTADO: Record<EstadoPedido, string> = {
   borrador: 'Borrador',
   pendiente: 'Pendiente de recibir',
+  recibido: 'Recibido',
   cancelado: 'Cancelado',
 }
 
 export const COLOR_ESTADO: Record<EstadoPedido, string> = {
   borrador: 'bg-gray-800 text-gray-300',
   pendiente: 'bg-yellow-900 text-yellow-300',
+  recibido: 'bg-green-900 text-green-300',
   cancelado: 'bg-red-900 text-red-300',
 }
 
