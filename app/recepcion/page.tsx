@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { obtenerRol } from '@/lib/roles'
 import RecepcionView from '@/components/RecepcionView'
 import type {
   ItemPorRecibir,
@@ -12,6 +13,7 @@ import type { Lote, Producto } from '@/lib/stock'
 export const dynamic = 'force-dynamic'
 
 export default async function RecepcionPage() {
+  const rol = await obtenerRol()
   const supabase = createClient()
 
   const [pendientes, items, productos, lotes, recepciones, recepcionItems, recepcionLotes] =
@@ -30,7 +32,7 @@ export default async function RecepcionPage() {
       supabase
         .from('recepciones')
         .select(
-          'id, pedido_id, pedido_numero, proveedor_nombre, nro_remito, notas, recibido_por_email, recibido_en'
+          'id, pedido_id, pedido_numero, proveedor_nombre, nro_remito, notas, recibido_por_email, recibido_en, anulada_en, anulada_por_email, motivo_anulacion'
         )
         .order('recibido_en', { ascending: false })
         .limit(50),
@@ -71,6 +73,7 @@ export default async function RecepcionPage() {
       recepciones={(recepciones.data ?? []) as Recepcion[]}
       recepcionItems={(recepcionItems.data ?? []) as RecepcionItem[]}
       recepcionLotes={(recepcionLotes.data ?? []) as RecepcionLote[]}
+      esAdmin={rol === 'admin'}
     />
   )
 }
