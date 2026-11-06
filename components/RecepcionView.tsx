@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import RecibirPedidoModal from '@/components/RecibirPedidoModal'
+import AnularRecepcionModal from '@/components/AnularRecepcionModal'
 import { formatearFecha, formatearNumeroPedido } from '@/lib/pedidos'
 import { formatearFechaHora } from '@/lib/recepcion'
 import type {
@@ -22,6 +23,7 @@ type Props = {
   recepciones: Recepcion[]
   recepcionItems: RecepcionItem[]
   recepcionLotes: RecepcionLote[]
+  esAdmin: boolean
 }
 
 function fechaDelPedido(fecha: string): string {
@@ -38,8 +40,10 @@ export default function RecepcionView({
   recepciones,
   recepcionItems,
   recepcionLotes,
+  esAdmin,
 }: Props) {
   const [recibiendo, setRecibiendo] = useState<PedidoPorRecibir | null>(null)
+  const [anulando, setAnulando] = useState<Recepcion | null>(null)
   const [expandidaId, setExpandidaId] = useState<string | null>(null)
 
   const productoPorId = useMemo(() => {
@@ -115,6 +119,7 @@ export default function RecepcionView({
           <div className="flex flex-col gap-2">
             {recepciones.map((r) => {
               const abierta = expandidaId === r.id
+              const anulada = r.anulada_en !== null
               const items = recepcionItems
                 .filter((i) => i.recepcion_id === r.id)
                 .map((item) => ({ item, producto: productoPorId.get(item.producto_id) }))
@@ -149,7 +154,9 @@ export default function RecepcionView({
               return (
                 <div
                   key={r.id}
-                  className="bg-[#0f1117] border border-gray-800 rounded-lg"
+                  className={`bg-[#0f1117] border border-gray-800 rounded-lg ${
+                    anulada ? 'opacity-70' : ''
+                  }`}
                 >
                   <button
                     onClick={() => setExpandidaId(abierta ? null : r.id)}
@@ -157,7 +164,12 @@ export default function RecepcionView({
                   >
                     <p className="text-gray-200 text-sm font-medium">
                       {formatearNumeroPedido(r.pedido_numero)} · {r.proveedor_nombre}
-                      {conObservaciones && (
+                      {anulada && (
+                        <span className="ml-2 px-2 py-0.5 rounded text-xs bg-red-900 text-red-300">
+                          Anulada
+                        </span>
+                      )}
+                      {!anulada && conObservaciones && (
                         <span className="ml-2 px-2 py-0.5 rounded text-xs bg-yellow-900 text-yellow-300">
                           Con rotos o faltantes
                         </span>
@@ -172,6 +184,14 @@ export default function RecepcionView({
 
                   {abierta && (
                     <div className="px-4 pb-4 overflow-x-auto">
+                      {anulada && (
+                        <p className="text-red-400 text-xs mb-3">
+                          Anulada el {formatearFechaHora(r.anulada_en as string)}
+                          {r.anulada_por_email && ` por ${r.anulada_por_email}`}
+                          {r.motivo_anulacion && `. Motivo: ${r.motivo_anulacion}`}
+                        </p>
+                      )}
+
                       {r.notas && (
                         <p className="text-gray-500 text-xs mb-3 whitespace-pre-line">
                           {r.notas}
@@ -239,6 +259,17 @@ export default function RecepcionView({
                           ))}
                         </div>
                       )}
+
+                      {esAdmin && !anulada && (
+                        <div className="flex justify-end mt-4">
+                          <button
+                            onClick={() => setAnulando(r)}
+                            className="text-xs bg-[#161922] hover:bg-gray-800 text-red-400 px-3 py-1.5 rounded-lg"
+                          >
+                            Anular recepción
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -254,6 +285,13 @@ export default function RecepcionView({
           items={itemsPorRecibir.filter((i) => i.pedido_id === recibiendo.id)}
           productos={productos}
           onCerrar={() => setRecibiendo(null)}
+        />
+      )}
+
+      {anulando && (
+        <AnularRecepcionModal
+          recepcion={anulando}
+          onCerrar={() => setAnulando(null)}
         />
       )}
     </div>
