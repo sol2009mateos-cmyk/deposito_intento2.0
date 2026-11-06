@@ -5,11 +5,14 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import PedidoModal from '@/components/PedidoModal'
 import ItemPedidoModal from '@/components/ItemPedidoModal'
+import CancelarPedidoModal from '@/components/CancelarPedidoModal'
 import type { DisponibleCatalogo } from '@/components/ItemPedidoModal'
 import {
   COLOR_ESTADO,
   NOMBRE_ESTADO,
+  estaAtrasado,
   formatearFecha,
+  formatearFechaHoraPedido,
   formatearNumeroPedido,
   totalPedido,
 } from '@/lib/pedidos'
@@ -25,6 +28,8 @@ type Props = {
   proveedores: Proveedor[]
   catalogo: ItemCatalogo[]
   productos: Producto[]
+  // Pedido que se abre al entrar (por ejemplo, el recién armado desde "Qué pedir").
+  seleccionInicialId: string | null
 }
 
 function fechaDelPedido(fecha: string): string {
@@ -39,15 +44,17 @@ export default function PedidosView({
   proveedores,
   catalogo,
   productos,
+  seleccionInicialId,
 }: Props) {
   const router = useRouter()
 
-  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null)
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(seleccionInicialId)
   const [filtroEstado, setFiltroEstado] = useState('')
   const [modalPedido, setModalPedido] = useState<{ pedido: Pedido | null } | null>(null)
   const [modalItem, setModalItem] = useState<{
     editar: { item: ItemPedido; producto: Producto } | null
   } | null>(null)
+  const [cancelando, setCancelando] = useState<Pedido | null>(null)
   const [trabajando, setTrabajando] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -141,13 +148,6 @@ export default function PedidosView({
     ejecutar('confirmar', 'confirmar_pedido', { p_id: pedido.id })
   }
 
-  function cancelar(pedido: Pedido) {
-    if (!window.confirm(`¿Cancelar el pedido ${formatearNumeroPedido(pedido.numero)}?`)) {
-      return
-    }
-    ejecutar('cancelar', 'cancelar_pedido', { p_id: pedido.id })
-  }
-
   function quitar(pedido: Pedido, producto: Producto) {
     if (!window.confirm(`¿Quitar "${producto.nombre}" del pedido?`)) return
     ejecutar(`quitar-${producto.id}`, 'quitar_item_pedido', {
@@ -159,6 +159,9 @@ export default function PedidosView({
   const estados = Object.keys(NOMBRE_ESTADO) as EstadoPedido[]
   const esBorrador = seleccionado?.estado === 'borrador'
   const puedeCancelar = seleccionado?.estado === 'borrador' || seleccionado?.estado === 'pendiente'
+  const seleccionadoAtrasado = seleccionado
+    ? estaAtrasado(seleccionado.estado, seleccionado.fecha_estimada)
+    : false
 
   return (
     <div>
@@ -207,6 +210,7 @@ export default function PedidosView({
               visibles.map((p) => {
                 const activoSel = seleccionado?.id === p.id
                 const total = totalPedido(itemsPorPedido.get(p.id) ?? [])
+                const atrasado = estaAtrasado(p.estado, p.fecha_estimada)
                 return (
                   <button
                     key={p.id}
@@ -217,8 +221,15 @@ export default function PedidosView({
                   >
                     <span className="flex items-center justify-between gap-2">
                       <span className="font-medium">{formatearNumeroPedido(p.numero)}</span>
-                      <span className={`px-2 py-0.5 rounded text-xs ${COLOR_ESTADO[p.estado]}`}>
-                        {NOMBRE_ESTADO[p.estado]}
+                      <span className="flex items-center gap-1">
+                        {atrasado && (
+                          <span className="px-2 py-0.5 rounded text-xs bg-red-700 text-white">
+                            Atrasado
+                          </span>
+                        )}
+                        <span className={`px-2 py-0.5 rounded text-xs ${COLOR_ESTADO[p.estado]}`}>
+                          {NOMBRE_ESTADO[p.estado]}
+                        </span>
                       </span>
                     </span>
                     <span
@@ -248,17 +259,40 @@ export default function PedidosView({
                     >
                       {NOMBRE_ESTADO[seleccionado.estado]}
                     </span>
+                    {seleccionadoAtrasado && (
+                      <span className="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-red-700 text-white">
+                        Atrasado
+                      </span>
+                    )}
                   </h2>
                   <p className="text-gray-300 text-sm mt-1">
                     {proveedorPorId.get(seleccionado.proveedor_id)?.nombre ?? '—'}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
                     Pedido el {fechaDelPedido(seleccionado.fecha_pedido)} · Llegada estimada:{' '}
-                    {formatearFecha(seleccionado.fecha_estimada)}
+                    <span className={seleccionadoAtrasado ? 'text-red-400' : ''}>
+                      {formatearFecha(seleccionado.fecha_estimada)}
+                    </span>
                   </p>
                   {seleccionado.creado_por_email && (
                     <p className="text-gray-600 text-xs">
                       Creado por {seleccionado.creado_por_email}
+                    </p>
+                  )}
+                  {seleccionado.confirmado_en && (
+                    <p className="text-gray-600 text-xs">
+                      Confirmado el {formatearFechaHoraPedido(seleccionado.confirmado_en)}
+                      {seleccionado.confirmado_por_email &&
+                        ` por ${seleccionado.confirmado_por_email}`}
+                    </p>
+                  )}
+                  {seleccionado.cancelado_en && (
+                    <p className="text-red-400 text-xs">
+                      Cancelado el {formatearFechaHoraPedido(seleccionado.cancelado_en)}
+                      {seleccionado.cancelado_por_email &&
+                        ` por ${seleccionado.cancelado_por_email}`}
+                      {seleccionado.motivo_cancelacion &&
+                        `. Motivo: ${seleccionado.motivo_cancelacion}`}
                     </p>
                   )}
                   {seleccionado.notas && (
@@ -294,11 +328,11 @@ export default function PedidosView({
                   )}
                   {puedeCancelar && (
                     <button
-                      onClick={() => cancelar(seleccionado)}
+                      onClick={() => setCancelando(seleccionado)}
                       disabled={trabajando !== null}
                       className="text-xs bg-[#0f1117] hover:bg-gray-800 disabled:opacity-50 text-red-400 px-3 py-1.5 rounded-lg"
                     >
-                      {trabajando === 'cancelar' ? '...' : 'Cancelar pedido'}
+                      Cancelar pedido
                     </button>
                   )}
                 </div>
@@ -407,6 +441,13 @@ export default function PedidosView({
           disponibles={disponibles}
           editar={modalItem.editar}
           onCerrar={() => setModalItem(null)}
+        />
+      )}
+
+      {cancelando && (
+        <CancelarPedidoModal
+          pedido={cancelando}
+          onCerrar={() => setCancelando(null)}
         />
       )}
     </div>
