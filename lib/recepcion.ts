@@ -23,6 +23,9 @@ export type Recepcion = {
   notas: string | null
   recibido_por_email: string | null
   recibido_en: string
+  anulada_en: string | null
+  anulada_por_email: string | null
+  motivo_anulacion: string | null
 }
 
 // Todas las cantidades están en unidades.
