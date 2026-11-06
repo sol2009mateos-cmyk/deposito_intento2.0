@@ -7,7 +7,11 @@ import type { Producto } from '@/lib/stock'
 
 export const dynamic = 'force-dynamic'
 
-export default async function PedidosPage() {
+export default async function PedidosPage({
+  searchParams,
+}: {
+  searchParams: { pedido?: string }
+}) {
   const rol = await obtenerRol()
 
   if (rol !== 'admin' && rol !== 'supervisor') {
@@ -27,7 +31,7 @@ export default async function PedidosPage() {
     supabase
       .from('pedidos')
       .select(
-        'id, numero, proveedor_id, estado, fecha_pedido, fecha_estimada, notas, creado_por_email'
+        'id, numero, proveedor_id, estado, fecha_pedido, fecha_estimada, notas, creado_por_email, confirmado_en, confirmado_por_email, cancelado_en, cancelado_por_email, motivo_cancelacion'
       )
       .order('numero', { ascending: false }),
     supabase
@@ -62,13 +66,21 @@ export default async function PedidosPage() {
     )
   }
 
+  const listaPedidos = (pedidos.data ?? []) as Pedido[]
+
+  // Si se llegó con ?pedido=..., se abre ese pedido (solo si existe).
+  const pedidoPedido = searchParams?.pedido
+  const seleccionInicialId =
+    pedidoPedido && listaPedidos.some((p) => p.id === pedidoPedido) ? pedidoPedido : null
+
   return (
     <PedidosView
-      pedidos={(pedidos.data ?? []) as Pedido[]}
+      pedidos={listaPedidos}
       items={(items.data ?? []) as ItemPedido[]}
       proveedores={(proveedores.data ?? []) as Proveedor[]}
       catalogo={(catalogo.data ?? []) as ItemCatalogo[]}
       productos={(productos.data ?? []) as Producto[]}
+      seleccionInicialId={seleccionInicialId}
     />
   )
 }
