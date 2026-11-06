@@ -3,6 +3,8 @@
 import { Fragment, useMemo, useState } from 'react'
 import ProductoModal from '@/components/ProductoModal'
 import CargaInicialModal from '@/components/CargaInicialModal'
+import SalidaModal from '@/components/SalidaModal'
+import AjusteModal from '@/components/AjusteModal'
 import {
   formatearStock,
   formatearVencimiento,
@@ -40,6 +42,8 @@ export default function InventarioView({
     producto: Producto | null
   } | null>(null)
   const [cargaProducto, setCargaProducto] = useState<Producto | null>(null)
+  const [salidaProducto, setSalidaProducto] = useState<Producto | null>(null)
+  const [ajuste, setAjuste] = useState<{ producto: Producto; lote: Lote } | null>(null)
 
   const nombreCategoria = useMemo(() => {
     const mapa = new Map<string, string>()
@@ -68,8 +72,6 @@ export default function InventarioView({
         return { producto: p, lotes: lotesProducto, total, proximo }
       })
   }, [productos, lotes, busqueda, categoriaFiltro, mostrarInactivos])
-
-  const columnas = puedeEditar ? 5 : 4
 
   return (
     <div>
@@ -137,7 +139,7 @@ export default function InventarioView({
                 <th className="pb-2">Categoría</th>
                 <th className="pb-2">Stock</th>
                 <th className="pb-2">Próx. vencimiento</th>
-                {puedeEditar && <th className="pb-2 text-right">Acciones</th>}
+                <th className="pb-2 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -167,36 +169,48 @@ export default function InventarioView({
                     <td className="py-3 text-gray-400">
                       {p.tiene_vencimiento ? formatearVencimiento(proximo) : 'Sin vencimiento'}
                     </td>
-                    {puedeEditar && (
-                      <td className="py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setCargaProducto(p)
-                            }}
-                            disabled={!p.activo}
-                            className="text-xs bg-[#0f1117] hover:bg-gray-800 disabled:opacity-40 text-gray-300 px-2 py-1.5 rounded-lg"
-                          >
-                            Cargar stock
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setModalProducto({ producto: p })
-                            }}
-                            className="text-xs bg-[#0f1117] hover:bg-gray-800 text-gray-300 px-2 py-1.5 rounded-lg"
-                          >
-                            Editar
-                          </button>
-                        </div>
-                      </td>
-                    )}
+                    <td className="py-3 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSalidaProducto(p)
+                          }}
+                          disabled={total === 0}
+                          className="text-xs bg-[#0f1117] hover:bg-gray-800 disabled:opacity-40 text-gray-300 px-2 py-1.5 rounded-lg"
+                        >
+                          Registrar salida
+                        </button>
+                        {puedeEditar && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setCargaProducto(p)
+                              }}
+                              disabled={!p.activo}
+                              className="text-xs bg-[#0f1117] hover:bg-gray-800 disabled:opacity-40 text-gray-300 px-2 py-1.5 rounded-lg"
+                            >
+                              Cargar stock
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setModalProducto({ producto: p })
+                              }}
+                              className="text-xs bg-[#0f1117] hover:bg-gray-800 text-gray-300 px-2 py-1.5 rounded-lg"
+                            >
+                              Editar
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
 
                   {expandido === p.id && (
                     <tr className="border-b border-gray-800 bg-[#0f1117]">
-                      <td colSpan={columnas} className="py-3 px-4">
+                      <td colSpan={5} className="py-3 px-4">
                         {lotesProducto.length === 0 ? (
                           <p className="text-gray-500 text-xs">
                             Este producto no tiene stock cargado.
@@ -204,13 +218,26 @@ export default function InventarioView({
                         ) : (
                           <div className="flex flex-col gap-1">
                             {lotesProducto.map((l) => (
-                              <p key={l.id} className="text-gray-400 text-xs">
-                                Lote {l.nro_lote ?? 'sin número'} ·{' '}
-                                {p.tiene_vencimiento
-                                  ? `Vence ${formatearVencimiento(l.vencimiento)}`
-                                  : 'Sin vencimiento'}{' '}
-                                · {formatearStock(l.cantidad_actual, p.unidades_por_bulto)}
-                              </p>
+                              <div
+                                key={l.id}
+                                className="flex flex-wrap items-center justify-between gap-2"
+                              >
+                                <p className="text-gray-400 text-xs">
+                                  Lote {l.nro_lote ?? 'sin número'} ·{' '}
+                                  {p.tiene_vencimiento
+                                    ? `Vence ${formatearVencimiento(l.vencimiento)}`
+                                    : 'Sin vencimiento'}{' '}
+                                  · {formatearStock(l.cantidad_actual, p.unidades_por_bulto)}
+                                </p>
+                                {puedeEditar && (
+                                  <button
+                                    onClick={() => setAjuste({ producto: p, lote: l })}
+                                    className="text-xs bg-[#161922] hover:bg-gray-800 text-gray-300 px-2 py-1 rounded-lg"
+                                  >
+                                    Ajustar
+                                  </button>
+                                )}
+                              </div>
                             ))}
                           </div>
                         )}
@@ -236,6 +263,22 @@ export default function InventarioView({
         <CargaInicialModal
           producto={cargaProducto}
           onCerrar={() => setCargaProducto(null)}
+        />
+      )}
+
+      {salidaProducto && (
+        <SalidaModal
+          producto={salidaProducto}
+          lotes={lotes.filter((l) => l.producto_id === salidaProducto.id)}
+          onCerrar={() => setSalidaProducto(null)}
+        />
+      )}
+
+      {ajuste && (
+        <AjusteModal
+          producto={ajuste.producto}
+          lote={ajuste.lote}
+          onCerrar={() => setAjuste(null)}
         />
       )}
     </div>
