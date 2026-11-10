@@ -19,6 +19,7 @@ import {
 import type { EstadoPedido, ItemPedido, Pedido } from '@/lib/pedidos'
 import { formatearPesos } from '@/lib/proveedores'
 import type { ItemCatalogo, Proveedor } from '@/lib/proveedores'
+import { formatearVariacion, preciosDistintos, variacionPorcentaje } from '@/lib/precios'
 import { formatearStock } from '@/lib/stock'
 import type { Producto } from '@/lib/stock'
 
@@ -137,6 +138,39 @@ export default function PedidosView({
     router.refresh()
   }
 
+  // Pasa los productos indicados al precio que hoy tiene el catálogo (solo en borrador).
+  async function usarPreciosCatalogo(
+    lista: { item: ItemPedido; producto: Producto; precioCatalogo: number }[]
+  ) {
+    if (!seleccionado) return
+
+    setErrorMsg('')
+    setTrabajando('precios')
+
+    const supabase = createClient()
+
+    for (const f of lista) {
+      const { error } = await supabase.rpc('guardar_item_pedido', {
+        p_pedido_id: seleccionado.id,
+        p_producto_id: f.producto.id,
+        p_cantidad: f.item.cantidad,
+        p_en_bultos: false,
+        p_precio: f.precioCatalogo,
+        p_precio_por_bulto: false,
+      })
+
+      if (error) {
+        setTrabajando(null)
+        setErrorMsg(error.message)
+        router.refresh()
+        return
+      }
+    }
+
+    setTrabajando(null)
+    router.refresh()
+  }
+
   function confirmar(pedido: Pedido) {
     if (
       !window.confirm(
@@ -162,6 +196,27 @@ export default function PedidosView({
   const seleccionadoAtrasado = seleccionado
     ? estaAtrasado(seleccionado.estado, seleccionado.fecha_estimada)
     : false
+
+  // Precio por unidad que hoy tiene el catálogo del proveedor de este pedido.
+  const precioCatalogoPorProducto = new Map<string, number>()
+  if (seleccionado) {
+    catalogo.forEach((c) => {
+      if (c.proveedor_id === seleccionado.proveedor_id) {
+        precioCatalogoPorProducto.set(c.producto_id, c.precio_unidad)
+      }
+    })
+  }
+
+  // Solo en borrador: productos cuyo precio en el pedido no coincide con el del catálogo.
+  const desactualizados = esBorrador
+    ? filas
+        .map((f) => ({ ...f, precioCatalogo: precioCatalogoPorProducto.get(f.item.producto_id) }))
+        .filter(
+          (f): f is { item: ItemPedido; producto: Producto; precioCatalogo: number } =>
+            f.precioCatalogo !== undefined &&
+            preciosDistintos(f.precioCatalogo, f.item.precio_unidad)
+        )
+    : []
 
   return (
     <div>
@@ -340,6 +395,23 @@ export default function PedidosView({
 
               {errorMsg && <p className="text-red-400 text-sm mb-3">{errorMsg}</p>}
 
+              {desactualizados.length > 0 && (
+                <div className="bg-yellow-900/30 border border-yellow-800 rounded-lg p-3 mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-yellow-300 text-sm">
+                    {desactualizados.length === 1
+                      ? '1 producto tiene un precio distinto al del catálogo del proveedor.'
+                      : `${desactualizados.length} productos tienen un precio distinto al del catálogo del proveedor.`}
+                  </p>
+                  <button
+                    onClick={() => usarPreciosCatalogo(desactualizados)}
+                    disabled={trabajando !== null}
+                    className="text-xs bg-yellow-700 hover:bg-yellow-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg"
+                  >
+                    {trabajando === 'precios' ? '...' : 'Actualizar al precio del catálogo'}
+                  </button>
+                </div>
+              )}
+
               {filas.length === 0 ? (
                 <p className="text-gray-500 text-sm py-2">
                   {esBorrador
@@ -358,7 +430,13 @@ export default function PedidosView({
                     </tr>
                   </thead>
                   <tbody>
-                    {filas.map(({ item, producto }) => (
+                    {filas.map(({ item, producto }) => {
+                      const precioCat = precioCatalogoPorProducto.get(item.producto_id)
+                      const distinto =
+                        esBorrador &&
+                        precioCat !== undefined &&
+                        preciosDistintos(precioCat, item.precio_unidad)
+                      return (
                       <tr key={item.id} className="border-b border-gray-800">
                         <td className="py-3">
                           <span className="text-gray-200">{producto.nombre}</span>
@@ -377,6 +455,24 @@ export default function PedidosView({
                             <span className="block text-gray-500 text-xs">
                               {formatearPesos(item.precio_unidad * producto.unidades_por_bulto)}{' '}
                               por bulto
+                            </span>
+                          )}
+                          {distinto && precioCat !== undefined && (
+                            <span className="block text-yellow-400 text-xs">
+                              Catálogo hoy: {formatearPesos(precioCat)} (
+                              {formatearVariacion(
+                                variacionPorcentaje(item.precio_unidad, precioCat)
+                              )}
+                              ){' '}
+                              <button
+                                onClick={() =>
+                                  usarPreciosCatalogo([{ item, producto, precioCatalogo: precioCat }])
+                                }
+                                disabled={trabajando !== null}
+                                className="underline hover:text-yellow-300 disabled:opacity-50"
+                              >
+                                Usar
+                              </button>
                             </span>
                           )}
                         </td>
@@ -403,7 +499,8 @@ export default function PedidosView({
                           </td>
                         )}
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                   <tfoot>
                     <tr>
