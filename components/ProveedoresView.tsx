@@ -159,6 +159,25 @@ export default function ProveedoresView({ proveedores, catalogo, productos }: Pr
                   {proveedor.email && (
                     <p className="text-gray-400 text-sm">{proveedor.email}</p>
                   )}
+                  {proveedor.cuit && (
+                    <p className="text-gray-400 text-sm">CUIT: {proveedor.cuit}</p>
+                  )}
+                  {proveedor.plazo_entrega_dias !== null && (
+                    <p className="text-gray-400 text-sm">
+                      Plazo de entrega: {proveedor.plazo_entrega_dias}{' '}
+                      {proveedor.plazo_entrega_dias === 1 ? 'día' : 'días'}
+                    </p>
+                  )}
+                  {proveedor.monto_minimo !== null && (
+                    <p className="text-gray-400 text-sm">
+                      Compra mínima: {formatearPesos(proveedor.monto_minimo)}
+                    </p>
+                  )}
+                  {proveedor.condicion_pago && (
+                    <p className="text-gray-400 text-sm">
+                      Condición de pago: {proveedor.condicion_pago}
+                    </p>
+                  )}
                   {proveedor.notas && (
                     <p className="text-gray-500 text-xs mt-1 whitespace-pre-line">
                       {proveedor.notas}
