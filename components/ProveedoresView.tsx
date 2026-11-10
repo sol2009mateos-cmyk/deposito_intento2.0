@@ -6,17 +6,23 @@ import { createClient } from '@/lib/supabase/client'
 import ProveedorModal from '@/components/ProveedorModal'
 import PrecioCatalogoModal from '@/components/PrecioCatalogoModal'
 import ImportarCatalogoModal from '@/components/ImportarCatalogoModal'
+import HistorialPreciosModal from '@/components/HistorialPreciosModal'
 import { formatearPesos } from '@/lib/proveedores'
 import type { ItemCatalogo, Proveedor } from '@/lib/proveedores'
+import { formatearVariacion, variacionPorcentaje } from '@/lib/precios'
+import type { CambioPrecio } from '@/lib/precios'
+import { formatearFechaHoraPedido } from '@/lib/pedidos'
 import type { Producto } from '@/lib/stock'
 
 type Props = {
   proveedores: Proveedor[]
   catalogo: ItemCatalogo[]
   productos: Producto[]
+  // Historial de precios, del cambio más nuevo al más viejo.
+  historial: CambioPrecio[]
 }
 
-export default function ProveedoresView({ proveedores, catalogo, productos }: Props) {
+export default function ProveedoresView({ proveedores, catalogo, productos, historial }: Props) {
   const router = useRouter()
 
   const [seleccionadoId, setSeleccionadoId] = useState<string | null>(
@@ -29,6 +35,7 @@ export default function ProveedoresView({ proveedores, catalogo, productos }: Pr
     editar: { item: ItemCatalogo; producto: Producto } | null
   } | null>(null)
   const [importando, setImportando] = useState(false)
+  const [verHistorial, setVerHistorial] = useState<Producto | null>(null)
   const [quitandoId, setQuitandoId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -45,6 +52,17 @@ export default function ProveedoresView({ proveedores, catalogo, productos }: Pr
     )
     return mapa
   }, [catalogo])
+
+  // Cambios de precio por producto (ya vienen del más nuevo al más viejo).
+  const cambiosPorProducto = useMemo(() => {
+    const mapa = new Map<string, CambioPrecio[]>()
+    historial.forEach((c) => {
+      const lista = mapa.get(c.producto_id) ?? []
+      lista.push(c)
+      mapa.set(c.producto_id, lista)
+    })
+    return mapa
+  }, [historial])
 
   // Productos activos que todavía no están en el catálogo de ningún proveedor.
   const disponibles = useMemo(() => {
@@ -248,9 +266,34 @@ export default function ProveedoresView({ proveedores, catalogo, productos }: Pr
                         </td>
                         <td className="py-3 text-gray-300">
                           {formatearPesos(item.precio_unidad)}
+                          {(() => {
+                            const ultimo = cambiosPorProducto.get(producto.id)?.[0]
+                            if (!ultimo || ultimo.precio_unidad_anterior === null) return null
+                            const variacion = variacionPorcentaje(
+                              ultimo.precio_unidad_anterior,
+                              ultimo.precio_unidad
+                            )
+                            if (variacion === null || Math.abs(variacion) < 0.05) return null
+                            return (
+                              <span
+                                className={`block text-xs ${
+                                  variacion > 0 ? 'text-red-400' : 'text-green-400'
+                                }`}
+                              >
+                                {formatearVariacion(variacion)} ·{' '}
+                                {formatearFechaHoraPedido(ultimo.cambiado_en).slice(0, 10)}
+                              </span>
+                            )
+                          })()}
                         </td>
                         <td className="py-3 text-right">
                           <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => setVerHistorial(producto)}
+                              className="text-xs bg-[#0f1117] hover:bg-gray-800 text-gray-300 px-2 py-1.5 rounded-lg"
+                            >
+                              Historial
+                            </button>
                             <button
                               onClick={() =>
                                 setModalPrecio({ editar: { item, producto } })
@@ -291,6 +334,14 @@ export default function ProveedoresView({ proveedores, catalogo, productos }: Pr
           disponibles={disponibles}
           editar={modalPrecio.editar}
           onCerrar={() => setModalPrecio(null)}
+        />
+      )}
+
+      {verHistorial && (
+        <HistorialPreciosModal
+          producto={verHistorial}
+          cambios={cambiosPorProducto.get(verHistorial.id) ?? []}
+          onCerrar={() => setVerHistorial(null)}
         />
       )}
 
