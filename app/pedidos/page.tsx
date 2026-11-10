@@ -39,7 +39,9 @@ export default async function PedidosPage({
       .select('id, pedido_id, producto_id, cantidad, precio_unidad'),
     supabase
       .from('proveedores')
-      .select('id, nombre, telefono, email, notas, activo')
+      .select(
+        'id, nombre, telefono, email, notas, activo, plazo_entrega_dias, monto_minimo, cuit, condicion_pago'
+      )
       .order('nombre'),
     supabase
       .from('catalogo_proveedor')
