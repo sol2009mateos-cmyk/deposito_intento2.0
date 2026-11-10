@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { obtenerRol } from '@/lib/roles'
 import ProveedoresView from '@/components/ProveedoresView'
 import type { ItemCatalogo, Proveedor } from '@/lib/proveedores'
+import type { CambioPrecio } from '@/lib/precios'
 import type { Producto } from '@/lib/stock'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +23,7 @@ export default async function ProveedoresPage() {
 
   const supabase = createClient()
 
-  const [proveedores, catalogo, productos] = await Promise.all([
+  const [proveedores, catalogo, productos, historial] = await Promise.all([
     supabase
       .from('proveedores')
       .select(
@@ -38,9 +39,15 @@ export default async function ProveedoresPage() {
         'id, nombre, codigo, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
       )
       .order('nombre'),
+    supabase
+      .from('precios_historial')
+      .select(
+        'id, proveedor_id, producto_id, precio, por_bulto, precio_unidad, precio_unidad_anterior, cambiado_en, cambiado_por_email'
+      )
+      .order('orden', { ascending: false }),
   ])
 
-  const error = proveedores.error ?? catalogo.error ?? productos.error
+  const error = proveedores.error ?? catalogo.error ?? productos.error ?? historial.error
 
   if (error) {
     return (
@@ -58,6 +65,7 @@ export default async function ProveedoresPage() {
       proveedores={(proveedores.data ?? []) as Proveedor[]}
       catalogo={(catalogo.data ?? []) as ItemCatalogo[]}
       productos={(productos.data ?? []) as Producto[]}
+      historial={(historial.data ?? []) as CambioPrecio[]}
     />
   )
 }
