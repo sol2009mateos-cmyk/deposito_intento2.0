@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { parsearPrecio } from '@/lib/proveedores'
 import type { Proveedor } from '@/lib/proveedores'
 
 type Props = {
@@ -22,12 +23,43 @@ export default function ProveedorModal({ proveedor, onCerrar }: Props) {
   const [email, setEmail] = useState(proveedor?.email ?? '')
   const [notas, setNotas] = useState(proveedor?.notas ?? '')
   const [activo, setActivo] = useState(proveedor?.activo ?? true)
+  const [plazo, setPlazo] = useState(
+    proveedor?.plazo_entrega_dias !== null && proveedor?.plazo_entrega_dias !== undefined
+      ? String(proveedor.plazo_entrega_dias)
+      : ''
+  )
+  const [montoMinimo, setMontoMinimo] = useState(
+    proveedor?.monto_minimo !== null && proveedor?.monto_minimo !== undefined
+      ? String(proveedor.monto_minimo).replace('.', ',')
+      : ''
+  )
+  const [cuit, setCuit] = useState(proveedor?.cuit ?? '')
+  const [condicionPago, setCondicionPago] = useState(proveedor?.condicion_pago ?? '')
   const [guardando, setGuardando] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault()
     setErrorMsg('')
+
+    let plazoDias: number | null = null
+    if (plazo.trim() !== '') {
+      plazoDias = Number(plazo)
+      if (!Number.isInteger(plazoDias) || plazoDias < 0) {
+        setErrorMsg('El plazo de entrega tiene que ser un número entero de días (0 o más)')
+        return
+      }
+    }
+
+    let minimo: number | null = null
+    if (montoMinimo.trim() !== '') {
+      minimo = parsearPrecio(montoMinimo)
+      if (minimo === null) {
+        setErrorMsg('No se entiende el monto mínimo de compra')
+        return
+      }
+    }
+
     setGuardando(true)
 
     const supabase = createClient()
@@ -36,6 +68,10 @@ export default function ProveedorModal({ proveedor, onCerrar }: Props) {
       p_telefono: telefono,
       p_email: email,
       p_notas: notas,
+      p_plazo_entrega_dias: plazoDias,
+      p_monto_minimo: minimo,
+      p_cuit: cuit,
+      p_condicion_pago: condicionPago,
     }
 
     const { error } = proveedor
@@ -93,6 +129,55 @@ export default function ProveedorModal({ proveedor, onCerrar }: Props) {
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          className={`${inputClass} mb-4`}
+        />
+
+        <label className="block text-gray-400 text-sm mb-1">
+          Plazo de entrega en días (opcional)
+        </label>
+        <input
+          type="number"
+          min={0}
+          step={1}
+          value={plazo}
+          onChange={(e) => setPlazo(e.target.value)}
+          placeholder="Ej: 7"
+          className={inputClass}
+        />
+        <p className="text-gray-600 text-xs mb-4 mt-1">
+          Con esto, al armar un pedido la fecha estimada de llegada se completa sola.
+        </p>
+
+        <label className="block text-gray-400 text-sm mb-1">
+          Monto mínimo de compra en pesos (opcional)
+        </label>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={montoMinimo}
+          onChange={(e) => setMontoMinimo(e.target.value)}
+          placeholder="Ej: 150.000"
+          className={`${inputClass} mb-4`}
+        />
+
+        <label className="block text-gray-400 text-sm mb-1">CUIT (opcional)</label>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={cuit}
+          onChange={(e) => setCuit(e.target.value)}
+          placeholder="Ej: 30-12345678-9"
+          className={`${inputClass} mb-4`}
+        />
+
+        <label className="block text-gray-400 text-sm mb-1">
+          Condición de pago (opcional)
+        </label>
+        <input
+          type="text"
+          value={condicionPago}
+          onChange={(e) => setCondicionPago(e.target.value)}
+          placeholder="Ej: Contado, 30 días, transferencia"
           className={`${inputClass} mb-4`}
         />
 
