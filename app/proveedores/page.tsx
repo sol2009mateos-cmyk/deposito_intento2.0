@@ -25,7 +25,9 @@ export default async function ProveedoresPage() {
   const [proveedores, catalogo, productos] = await Promise.all([
     supabase
       .from('proveedores')
-      .select('id, nombre, telefono, email, notas, activo')
+      .select(
+        'id, nombre, telefono, email, notas, activo, plazo_entrega_dias, monto_minimo, cuit, condicion_pago'
+      )
       .order('nombre'),
     supabase
       .from('catalogo_proveedor')
