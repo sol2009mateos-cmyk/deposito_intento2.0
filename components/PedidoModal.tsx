@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatearNumeroPedido } from '@/lib/pedidos'
 import type { Pedido } from '@/lib/pedidos'
+import { fechaEstimadaPorPlazo, formatearPesos } from '@/lib/proveedores'
 import type { Proveedor } from '@/lib/proveedores'
 
 type Props = {
@@ -25,11 +26,21 @@ export default function PedidoModal({ proveedores, pedido, onCreado, onCerrar }:
   const [proveedorId, setProveedorId] = useState(pedido?.proveedor_id ?? '')
   const [fechaEstimada, setFechaEstimada] = useState(pedido?.fecha_estimada ?? '')
   const [notas, setNotas] = useState(pedido?.notas ?? '')
+  // Si la fecha la tocó la persona, no se pisa al cambiar de proveedor.
+  const [fechaTocada, setFechaTocada] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
   const activos = proveedores.filter((p) => p.activo)
   const proveedorActual = proveedores.find((p) => p.id === proveedorId) ?? null
+
+  function elegirProveedor(id: string) {
+    setProveedorId(id)
+    if (!fechaTocada) {
+      const elegido = proveedores.find((p) => p.id === id)
+      setFechaEstimada(fechaEstimadaPorPlazo(elegido?.plazo_entrega_dias ?? null))
+    }
+  }
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault()
@@ -100,7 +111,7 @@ export default function PedidoModal({ proveedores, pedido, onCreado, onCerrar }:
         ) : (
           <select
             value={proveedorId}
-            onChange={(e) => setProveedorId(e.target.value)}
+            onChange={(e) => elegirProveedor(e.target.value)}
             required
             className={`${inputClass} mb-4`}
           >
@@ -117,15 +128,41 @@ export default function PedidoModal({ proveedores, pedido, onCreado, onCerrar }:
           </select>
         )}
 
+        {!editando && proveedorActual && (
+          <div className="text-gray-500 text-xs mb-4 -mt-2">
+            {proveedorActual.plazo_entrega_dias !== null && (
+              <p>
+                Plazo de entrega: {proveedorActual.plazo_entrega_dias}{' '}
+                {proveedorActual.plazo_entrega_dias === 1 ? 'día' : 'días'}
+              </p>
+            )}
+            {proveedorActual.monto_minimo !== null && (
+              <p>Compra mínima: {formatearPesos(proveedorActual.monto_minimo)}</p>
+            )}
+            {proveedorActual.condicion_pago && (
+              <p>Condición de pago: {proveedorActual.condicion_pago}</p>
+            )}
+          </div>
+        )}
+
         <label className="block text-gray-400 text-sm mb-1">
           Fecha estimada de llegada (opcional)
         </label>
         <input
           type="date"
           value={fechaEstimada}
-          onChange={(e) => setFechaEstimada(e.target.value)}
-          className={`${inputClass} mb-4`}
+          onChange={(e) => {
+            setFechaTocada(true)
+            setFechaEstimada(e.target.value)
+          }}
+          className={`${inputClass} mb-1`}
         />
+        {!editando && (
+          <p className="text-gray-600 text-xs mb-4">
+            Si la dejás vacía, se calcula con el plazo del proveedor (si tiene uno cargado).
+          </p>
+        )}
+        {editando && <div className="mb-3" />}
 
         <label className="block text-gray-400 text-sm mb-1">
           Notas (opcional)
