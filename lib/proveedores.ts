@@ -1,3 +1,5 @@
+import { hoyArgentina } from '@/lib/pedidos'
+
 export type Proveedor = {
   id: string
   nombre: string
@@ -5,6 +7,10 @@ export type Proveedor = {
   email: string | null
   notas: string | null
   activo: boolean
+  plazo_entrega_dias: number | null
+  monto_minimo: number | null
+  cuit: string | null
+  condicion_pago: string | null
 }
 
 export type ItemCatalogo = {
@@ -28,6 +34,15 @@ export type ResultadoImportacion = {
   nombre_repetido: string[]
   de_otro_proveedor: string[]
   invalidos: string[]
+}
+
+// Fecha de llegada estimada: hoy (en Argentina) más el plazo del proveedor, como "2026-11-20".
+// Si el proveedor no tiene plazo cargado, devuelve "" (fecha vacía).
+export function fechaEstimadaPorPlazo(plazoDias: number | null): string {
+  if (plazoDias === null || plazoDias === undefined) return ''
+  const [anio, mes, dia] = hoyArgentina().split('-').map(Number)
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia + plazoDias))
+  return fecha.toISOString().slice(0, 10)
 }
 
 // Muestra un número como pesos argentinos: $ 1.234,50
