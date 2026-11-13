@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import PedidoModal from '@/components/PedidoModal'
 import ItemPedidoModal from '@/components/ItemPedidoModal'
 import CancelarPedidoModal from '@/components/CancelarPedidoModal'
+import EnviarPedidoModal from '@/components/EnviarPedidoModal'
 import type { DisponibleCatalogo } from '@/components/ItemPedidoModal'
 import {
   COLOR_ESTADO,
@@ -20,6 +21,7 @@ import type { EstadoPedido, ItemPedido, Pedido } from '@/lib/pedidos'
 import { formatearPesos } from '@/lib/proveedores'
 import type { ItemCatalogo, Proveedor } from '@/lib/proveedores'
 import { formatearVariacion, preciosDistintos, variacionPorcentaje } from '@/lib/precios'
+import type { LineaEnvio } from '@/lib/enviarPedido'
 import { formatearStock } from '@/lib/stock'
 import type { Producto } from '@/lib/stock'
 
@@ -56,6 +58,8 @@ export default function PedidosView({
     editar: { item: ItemPedido; producto: Producto } | null
   } | null>(null)
   const [cancelando, setCancelando] = useState<Pedido | null>(null)
+  const [enviando, setEnviando] = useState(false)
+  const [aviso, setAviso] = useState('')
   const [trabajando, setTrabajando] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -171,10 +175,61 @@ export default function PedidosView({
     router.refresh()
   }
 
-  function confirmar(pedido: Pedido) {
+  // Crea un borrador nuevo con los mismos productos y cantidades, a precio de catálogo de hoy.
+  async function repetir(pedido: Pedido) {
     if (
       !window.confirm(
-        `¿Confirmar el pedido ${formatearNumeroPedido(pedido.numero)}? Después no se va a poder editar.`
+        `¿Crear un pedido nuevo en borrador con los mismos productos y cantidades de ${formatearNumeroPedido(pedido.numero)}? Los precios se toman del catálogo de hoy.`
+      )
+    ) {
+      return
+    }
+
+    setErrorMsg('')
+    setAviso('')
+    setTrabajando('repetir')
+
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc('repetir_pedido', { p_pedido_id: pedido.id })
+
+    setTrabajando(null)
+
+    if (error) {
+      setErrorMsg(error.message)
+      return
+    }
+
+    const resultado = data as {
+      id: string
+      numero: number
+      copiados: number
+      omitidos: string[]
+    }
+
+    let texto = `Se creó ${formatearNumeroPedido(resultado.numero)} en borrador con ${resultado.copiados} ${
+      resultado.copiados === 1 ? 'producto' : 'productos'
+    }.`
+    if (resultado.omitidos.length > 0) {
+      texto += ` Quedaron afuera porque ya no están en el catálogo del proveedor o están inactivos: ${resultado.omitidos.join(', ')}.`
+    }
+
+    setAviso(texto)
+    setFiltroEstado('')
+    setSeleccionadoId(resultado.id)
+    router.refresh()
+  }
+
+  function confirmar(pedido: Pedido) {
+    const minimo = proveedorPorId.get(pedido.proveedor_id)?.monto_minimo ?? null
+    const total = totalPedido(itemsPorPedido.get(pedido.id) ?? [])
+    const advertencia =
+      minimo !== null && total < minimo
+        ? `\n\nOjo: el total (${formatearPesos(total)}) está por debajo de la compra mínima del proveedor (${formatearPesos(minimo)}).`
+        : ''
+
+    if (
+      !window.confirm(
+        `¿Confirmar el pedido ${formatearNumeroPedido(pedido.numero)}? Después no se va a poder editar.${advertencia}`
       )
     ) {
       return
@@ -196,6 +251,23 @@ export default function PedidosView({
   const seleccionadoAtrasado = seleccionado
     ? estaAtrasado(seleccionado.estado, seleccionado.fecha_estimada)
     : false
+
+  const proveedorSeleccionado = seleccionado
+    ? proveedorPorId.get(seleccionado.proveedor_id) ?? null
+    : null
+  const totalSeleccionado = totalPedido(itemsSeleccionado)
+  const minimoProveedor = proveedorSeleccionado?.monto_minimo ?? null
+  const bajoMinimo =
+    esBorrador && minimoProveedor !== null && filas.length > 0 && totalSeleccionado < minimoProveedor
+
+  const lineasEnvio: LineaEnvio[] = filas.map(({ item, producto }) => ({
+    nombre: producto.nombre,
+    codigo: producto.codigo,
+    unidades_por_bulto: producto.unidades_por_bulto,
+    cantidad: item.cantidad,
+    precio_unidad: item.precio_unidad,
+  }))
+  const puedeEnviar = seleccionado !== null && seleccionado.estado !== 'cancelado' && filas.length > 0
 
   // Precio por unidad que hoy tiene el catálogo del proveedor de este pedido.
   const precioCatalogoPorProducto = new Map<string, number>()
@@ -269,7 +341,10 @@ export default function PedidosView({
                 return (
                   <button
                     key={p.id}
-                    onClick={() => setSeleccionadoId(p.id)}
+                    onClick={() => {
+                      setSeleccionadoId(p.id)
+                      setAviso('')
+                    }}
                     className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 ${
                       activoSel ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'
                     }`}
@@ -381,6 +456,21 @@ export default function PedidosView({
                       </button>
                     </>
                   )}
+                  {puedeEnviar && (
+                    <button
+                      onClick={() => setEnviando(true)}
+                      className="text-xs bg-[#0f1117] hover:bg-gray-800 text-gray-300 px-3 py-1.5 rounded-lg"
+                    >
+                      Enviar al proveedor
+                    </button>
+                  )}
+                  <button
+                    onClick={() => repetir(seleccionado)}
+                    disabled={trabajando !== null || itemsSeleccionado.length === 0}
+                    className="text-xs bg-[#0f1117] hover:bg-gray-800 disabled:opacity-50 text-gray-300 px-3 py-1.5 rounded-lg"
+                  >
+                    {trabajando === 'repetir' ? '...' : 'Repetir pedido'}
+                  </button>
                   {puedeCancelar && (
                     <button
                       onClick={() => setCancelando(seleccionado)}
@@ -394,6 +484,28 @@ export default function PedidosView({
               </div>
 
               {errorMsg && <p className="text-red-400 text-sm mb-3">{errorMsg}</p>}
+
+              {aviso && (
+                <div className="bg-green-900/30 border border-green-800 rounded-lg p-3 mb-4 flex items-start justify-between gap-2">
+                  <p className="text-green-300 text-sm">{aviso}</p>
+                  <button
+                    onClick={() => setAviso('')}
+                    className="text-xs text-green-300 hover:text-white"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              )}
+
+              {bajoMinimo && minimoProveedor !== null && (
+                <div className="bg-yellow-900/30 border border-yellow-800 rounded-lg p-3 mb-4">
+                  <p className="text-yellow-300 text-sm">
+                    El total ({formatearPesos(totalSeleccionado)}) está por debajo de la compra mínima
+                    del proveedor ({formatearPesos(minimoProveedor)}). Faltan{' '}
+                    {formatearPesos(minimoProveedor - totalSeleccionado)}.
+                  </p>
+                </div>
+              )}
 
               {desactualizados.length > 0 && (
                 <div className="bg-yellow-900/30 border border-yellow-800 rounded-lg p-3 mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -538,6 +650,21 @@ export default function PedidosView({
           disponibles={disponibles}
           editar={modalItem.editar}
           onCerrar={() => setModalItem(null)}
+        />
+      )}
+
+      {enviando && seleccionado && puedeEnviar && (
+        <EnviarPedidoModal
+          datos={{
+            numero: seleccionado.numero,
+            proveedor: proveedorSeleccionado?.nombre ?? '—',
+            fechaPedido: fechaDelPedido(seleccionado.fecha_pedido),
+            fechaEstimada: seleccionado.fecha_estimada,
+            notas: seleccionado.notas,
+            lineas: lineasEnvio,
+          }}
+          emailProveedor={proveedorSeleccionado?.email ?? null}
+          onCerrar={() => setEnviando(false)}
         />
       )}
 
