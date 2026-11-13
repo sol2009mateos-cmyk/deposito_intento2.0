@@ -7,7 +7,9 @@ import PedidoModal from '@/components/PedidoModal'
 import ItemPedidoModal from '@/components/ItemPedidoModal'
 import CancelarPedidoModal from '@/components/CancelarPedidoModal'
 import EnviarPedidoModal from '@/components/EnviarPedidoModal'
+import GrillaPedidoModal from '@/components/GrillaPedidoModal'
 import type { DisponibleCatalogo } from '@/components/ItemPedidoModal'
+import type { FilaCatalogo } from '@/components/GrillaPedidoModal'
 import {
   COLOR_ESTADO,
   NOMBRE_ESTADO,
@@ -59,6 +61,7 @@ export default function PedidosView({
   } | null>(null)
   const [cancelando, setCancelando] = useState<Pedido | null>(null)
   const [enviando, setEnviando] = useState(false)
+  const [grilla, setGrilla] = useState(false)
   const [aviso, setAviso] = useState('')
   const [trabajando, setTrabajando] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -120,6 +123,18 @@ export default function PedidosView({
     })
     return lista.sort((a, b) => a.producto.nombre.localeCompare(b.producto.nombre))
   }, [seleccionado, itemsSeleccionado, catalogo, productoPorId])
+
+  // Todos los productos activos del catálogo del proveedor del pedido seleccionado (para la grilla).
+  const catalogoDelProveedor: FilaCatalogo[] = useMemo(() => {
+    if (!seleccionado) return []
+    const lista: FilaCatalogo[] = []
+    catalogo.forEach((c) => {
+      if (c.proveedor_id !== seleccionado.proveedor_id) return
+      const producto = productoPorId.get(c.producto_id)
+      if (producto && producto.activo) lista.push({ producto, catalogo: c })
+    })
+    return lista
+  }, [seleccionado, catalogo, productoPorId])
 
   async function ejecutar(
     clave: string,
@@ -442,6 +457,12 @@ export default function PedidosView({
                         Editar pedido
                       </button>
                       <button
+                        onClick={() => setGrilla(true)}
+                        className="text-xs bg-[#0f1117] hover:bg-gray-800 text-gray-300 px-3 py-1.5 rounded-lg"
+                      >
+                        Cargar en grilla
+                      </button>
+                      <button
                         onClick={() => setModalItem({ editar: null })}
                         className="text-xs bg-[#0f1117] hover:bg-gray-800 text-gray-300 px-3 py-1.5 rounded-lg"
                       >
@@ -650,6 +671,16 @@ export default function PedidosView({
           disponibles={disponibles}
           editar={modalItem.editar}
           onCerrar={() => setModalItem(null)}
+        />
+      )}
+
+      {grilla && seleccionado && esBorrador && (
+        <GrillaPedidoModal
+          pedido={seleccionado}
+          filasCatalogo={catalogoDelProveedor}
+          itemsPedido={itemsSeleccionado}
+          minimo={minimoProveedor}
+          onCerrar={() => setGrilla(false)}
         />
       )}
 
