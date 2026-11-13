@@ -74,6 +74,7 @@ export default async function RecepcionPage() {
       recepcionItems={(recepcionItems.data ?? []) as RecepcionItem[]}
       recepcionLotes={(recepcionLotes.data ?? []) as RecepcionLote[]}
       esAdmin={rol === 'admin'}
+      puedeReponer={rol === 'admin' || rol === 'supervisor'}
     />
   )
 }
