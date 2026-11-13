@@ -1,6 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 import RecibirPedidoModal from '@/components/RecibirPedidoModal'
 import AnularRecepcionModal from '@/components/AnularRecepcionModal'
 import { formatearFecha, formatearNumeroPedido } from '@/lib/pedidos'
@@ -24,6 +26,8 @@ type Props = {
   recepcionItems: RecepcionItem[]
   recepcionLotes: RecepcionLote[]
   esAdmin: boolean
+  // admin o supervisor: pueden armar el pedido de reposición
+  puedeReponer: boolean
 }
 
 function fechaDelPedido(fecha: string): string {
@@ -41,10 +45,19 @@ export default function RecepcionView({
   recepcionItems,
   recepcionLotes,
   esAdmin,
+  puedeReponer,
 }: Props) {
   const [recibiendo, setRecibiendo] = useState<PedidoPorRecibir | null>(null)
   const [anulando, setAnulando] = useState<Recepcion | null>(null)
   const [expandidaId, setExpandidaId] = useState<string | null>(null)
+  const [reponiendoId, setReponiendoId] = useState<string | null>(null)
+  const [errorRepo, setErrorRepo] = useState('')
+  const [avisoRepo, setAvisoRepo] = useState<{
+    id: string
+    numero: number
+    copiados: number
+    omitidos: string[]
+  } | null>(null)
 
   const productoPorId = useMemo(() => {
     const mapa = new Map<string, Producto>()
@@ -65,6 +78,37 @@ export default function RecepcionView({
     )
     return mapa
   }, [itemsPorRecibir])
+
+  // Arma un borrador de pedido con los rotos y faltantes de una recepción.
+  async function crearReposicion(r: Recepcion) {
+    if (
+      !window.confirm(
+        `¿Crear un pedido nuevo en borrador con los rotos y faltantes de ${formatearNumeroPedido(r.pedido_numero)}? Los precios se toman del catálogo de hoy.`
+      )
+    ) {
+      return
+    }
+
+    setErrorRepo('')
+    setAvisoRepo(null)
+    setReponiendoId(r.id)
+
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc('crear_pedido_reposicion', {
+      p_recepcion_id: r.id,
+    })
+
+    setReponiendoId(null)
+
+    if (error) {
+      setErrorRepo(error.message)
+      return
+    }
+
+    setAvisoRepo(
+      data as { id: string; numero: number; copiados: number; omitidos: string[] }
+    )
+  }
 
   return (
     <div>
@@ -112,6 +156,27 @@ export default function RecepcionView({
       </div>
 
       <h2 className="text-white font-medium mb-3">Recepciones anteriores</h2>
+
+      {avisoRepo && (
+        <div className="bg-green-900/30 border border-green-800 rounded-lg p-3 mb-3 flex items-start justify-between gap-2">
+          <p className="text-green-300 text-sm">
+            Se creó {formatearNumeroPedido(avisoRepo.numero)} en borrador con {avisoRepo.copiados}{' '}
+            {avisoRepo.copiados === 1 ? 'producto' : 'productos'}.
+            {avisoRepo.omitidos.length > 0 &&
+              ` Quedaron afuera porque no están en el catálogo del proveedor o están inactivos: ${avisoRepo.omitidos.join(', ')}.`}{' '}
+            <Link href={`/pedidos?pedido=${avisoRepo.id}`} className="underline hover:text-white">
+              Ver el pedido
+            </Link>
+          </p>
+          <button
+            onClick={() => setAvisoRepo(null)}
+            className="text-xs text-green-300 hover:text-white"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+      {errorRepo && <p className="text-red-400 text-sm mb-3">{errorRepo}</p>}
       <div className="bg-[#161922] rounded-lg p-4">
         {recepciones.length === 0 ? (
           <p className="text-gray-500 text-sm">Todavía no se recibió ningún pedido.</p>
@@ -260,14 +325,27 @@ export default function RecepcionView({
                         </div>
                       )}
 
-                      {esAdmin && !anulada && (
-                        <div className="flex justify-end mt-4">
-                          <button
-                            onClick={() => setAnulando(r)}
-                            className="text-xs bg-[#161922] hover:bg-gray-800 text-red-400 px-3 py-1.5 rounded-lg"
-                          >
-                            Anular recepción
-                          </button>
+                      {!anulada && ((puedeReponer && conObservaciones) || esAdmin) && (
+                        <div className="flex flex-wrap justify-end gap-2 mt-4">
+                          {puedeReponer && conObservaciones && (
+                            <button
+                              onClick={() => crearReposicion(r)}
+                              disabled={reponiendoId !== null}
+                              className="text-xs bg-[#161922] hover:bg-gray-800 disabled:opacity-50 text-yellow-300 px-3 py-1.5 rounded-lg"
+                            >
+                              {reponiendoId === r.id
+                                ? '...'
+                                : 'Crear pedido con rotos y faltantes'}
+                            </button>
+                          )}
+                          {esAdmin && (
+                            <button
+                              onClick={() => setAnulando(r)}
+                              className="text-xs bg-[#161922] hover:bg-gray-800 text-red-400 px-3 py-1.5 rounded-lg"
+                            >
+                              Anular recepción
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
