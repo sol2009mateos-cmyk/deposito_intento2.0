@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatearNumeroPedido } from '@/lib/pedidos'
@@ -67,6 +67,9 @@ export default function RecibirPedidoModal({ pedido, items, productos, onCerrar 
     })
     return inicial
   })
+  const [busqueda, setBusqueda] = useState('')
+  const [avisoBusqueda, setAvisoBusqueda] = useState('')
+  const contenedor = useRef<HTMLDivElement>(null)
   const [remito, setRemito] = useState('')
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -117,6 +120,71 @@ export default function RecibirPedidoModal({ pedido, items, productos, onCerrar 
     }))
   }
 
+  // Carga en cada producto lo mismo que se pidió (en un solo lote) y borra los rotos.
+  // El vencimiento y el Nº de lote de cada producto se completan a mano.
+  function llegoTodoCompleto() {
+    setErrorMsg('')
+    setForms((prev) => {
+      const nuevo: Record<string, ProductoForm> = { ...prev }
+      items.forEach((item) => {
+        const producto = productos.find((p) => p.id === item.producto_id)
+        const form = prev[item.producto_id]
+        if (!producto || !form) return
+        const porBulto = producto.unidades_por_bulto
+        const primero = form.lotes[0] ?? loteVacio()
+        nuevo[item.producto_id] = {
+          lotes: [
+            {
+              ...primero,
+              bultos: porBulto > 1 ? String(Math.floor(item.cantidad / porBulto)) : '',
+              sueltas: String(porBulto > 1 ? item.cantidad % porBulto : item.cantidad),
+            },
+          ],
+          rotoBultos: '',
+          rotoSueltas: '',
+        }
+      })
+      return nuevo
+    })
+  }
+
+  // Busca por código (o nombre). Con Enter (lo que hace el lector de códigos) salta al producto.
+  function buscarProducto() {
+    const texto = busqueda.trim().toLowerCase()
+    if (texto === '') return
+
+    const coincidencias = filas.filter(
+      (f) =>
+        (f.producto.codigo ?? '').toLowerCase() === texto ||
+        f.producto.nombre.toLowerCase().includes(texto) ||
+        (f.producto.codigo ?? '').toLowerCase().includes(texto)
+    )
+    const exacta = coincidencias.find((f) => (f.producto.codigo ?? '').toLowerCase() === texto)
+    const elegida = exacta ?? (coincidencias.length === 1 ? coincidencias[0] : null)
+
+    if (!elegida) {
+      setAvisoBusqueda(
+        coincidencias.length === 0
+          ? 'Ese código no corresponde a ningún producto de este pedido.'
+          : 'Hay más de un producto con ese texto. Escribí más del código o elegí uno de la lista.'
+      )
+      return
+    }
+
+    setAvisoBusqueda('')
+    setBusqueda('')
+    setTimeout(() => {
+      const campo = contenedor.current?.querySelector<HTMLInputElement>(
+        `[data-producto="${elegida.producto.id}"] input[data-primero="1"]`
+      )
+      if (campo) {
+        campo.scrollIntoView({ block: 'center' })
+        campo.focus()
+        campo.select()
+      }
+    }, 0)
+  }
+
   // Una fila por producto del pedido, con todo ya convertido a unidades.
   const filas = items
     .map((item) => {
@@ -136,6 +204,16 @@ export default function RecibirPedidoModal({ pedido, items, productos, onCerrar 
     })
     .filter((f): f is NonNullable<typeof f> => f !== null)
     .sort((a, b) => a.producto.nombre.localeCompare(b.producto.nombre))
+
+  const textoFiltro = busqueda.trim().toLowerCase()
+  const filasVisibles =
+    textoFiltro === ''
+      ? filas
+      : filas.filter(
+          (f) =>
+            f.producto.nombre.toLowerCase().includes(textoFiltro) ||
+            (f.producto.codigo ?? '').toLowerCase().includes(textoFiltro)
+        )
 
   async function confirmarRecepcion() {
     setErrorMsg('')
@@ -314,8 +392,43 @@ export default function RecibirPedidoModal({ pedido, items, productos, onCerrar 
               agregá un lote por cada vencimiento.
             </p>
 
-            <div className="flex flex-col gap-4">
-              {filas.map((fila) => {
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <input
+                type="text"
+                autoFocus
+                value={busqueda}
+                onChange={(e) => {
+                  setBusqueda(e.target.value)
+                  setAvisoBusqueda('')
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    buscarProducto()
+                  }
+                }}
+                placeholder="Escaneá o escribí el código del producto y apretá Enter"
+                className={`${inputClass} flex-1 min-w-[240px]`}
+              />
+              <button
+                type="button"
+                onClick={llegoTodoCompleto}
+                className="text-sm bg-[#0f1117] hover:bg-gray-800 text-green-400 px-3 py-2 rounded-lg"
+              >
+                Llegó todo completo
+              </button>
+            </div>
+            {avisoBusqueda && <p className="text-yellow-400 text-xs mb-3">{avisoBusqueda}</p>}
+            <p className="text-gray-600 text-xs mb-4">
+              &quot;Llegó todo completo&quot; carga las cantidades pedidas. Después completá los
+              vencimientos y corregí lo que haya venido distinto.
+            </p>
+
+            <div ref={contenedor} className="flex flex-col gap-4">
+              {filasVisibles.length === 0 && (
+                <p className="text-gray-500 text-sm">Ningún producto coincide con la búsqueda.</p>
+              )}
+              {filasVisibles.map((fila) => {
                 const faltante = Math.max(
                   fila.item.cantidad - fila.recibido - fila.roto,
                   0
@@ -324,6 +437,7 @@ export default function RecibirPedidoModal({ pedido, items, productos, onCerrar 
                 return (
                   <div
                     key={fila.producto.id}
+                    data-producto={fila.producto.id}
                     className="bg-[#0f1117] border border-gray-800 rounded-lg p-4"
                   >
                     <p className="text-gray-200 text-sm font-medium">
@@ -346,6 +460,7 @@ export default function RecibirPedidoModal({ pedido, items, productos, onCerrar 
                               type="number"
                               min={0}
                               value={l.bultos}
+                              data-primero={indice === 0 ? '1' : undefined}
                               onChange={(e) =>
                                 cambiarLote(fila.producto.id, indice, 'bultos', e.target.value)
                               }
@@ -363,6 +478,7 @@ export default function RecibirPedidoModal({ pedido, items, productos, onCerrar 
                             type="number"
                             min={0}
                             value={l.sueltas}
+                            data-primero={indice === 0 && !usaBultos ? '1' : undefined}
                             onChange={(e) =>
                               cambiarLote(fila.producto.id, indice, 'sueltas', e.target.value)
                             }
