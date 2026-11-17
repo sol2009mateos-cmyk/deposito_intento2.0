@@ -55,6 +55,9 @@ export default function PedidosView({
 
   const [seleccionadoId, setSeleccionadoId] = useState<string | null>(seleccionInicialId)
   const [filtroEstado, setFiltroEstado] = useState('')
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroProveedor, setFiltroProveedor] = useState('')
+  const [soloAtrasados, setSoloAtrasados] = useState(false)
   const [modalPedido, setModalPedido] = useState<{ pedido: Pedido | null } | null>(null)
   const [modalItem, setModalItem] = useState<{
     editar: { item: ItemPedido; producto: Producto } | null
@@ -88,10 +91,47 @@ export default function PedidosView({
     return mapa
   }, [items])
 
-  const visibles = useMemo(
-    () => pedidos.filter((p) => filtroEstado === '' || p.estado === filtroEstado),
-    [pedidos, filtroEstado]
-  )
+  const visibles = useMemo(() => {
+    const texto = busqueda.trim().toLowerCase()
+    return pedidos.filter((p) => {
+      if (filtroEstado !== '' && p.estado !== filtroEstado) return false
+      if (filtroProveedor !== '' && p.proveedor_id !== filtroProveedor) return false
+      if (soloAtrasados && !estaAtrasado(p.estado, p.fecha_estimada)) return false
+      if (texto === '') return true
+
+      // Se busca en el número, el proveedor, las notas y los productos del pedido.
+      const partes = [
+        formatearNumeroPedido(p.numero),
+        String(p.numero),
+        proveedorPorId.get(p.proveedor_id)?.nombre ?? '',
+        p.notas ?? '',
+        ...(itemsPorPedido.get(p.id) ?? []).map((i) => {
+          const producto = productoPorId.get(i.producto_id)
+          return `${producto?.nombre ?? ''} ${producto?.codigo ?? ''}`
+        }),
+      ]
+      return partes.join(' ').toLowerCase().includes(texto)
+    })
+  }, [
+    pedidos,
+    filtroEstado,
+    filtroProveedor,
+    soloAtrasados,
+    busqueda,
+    proveedorPorId,
+    itemsPorPedido,
+    productoPorId,
+  ])
+
+  const hayFiltros =
+    filtroEstado !== '' || filtroProveedor !== '' || soloAtrasados || busqueda.trim() !== ''
+
+  function limpiarFiltros() {
+    setFiltroEstado('')
+    setFiltroProveedor('')
+    setSoloAtrasados(false)
+    setBusqueda('')
+  }
 
   const seleccionado: Pedido | null =
     pedidos.find((p) => p.id === seleccionadoId) ??
@@ -229,7 +269,7 @@ export default function PedidosView({
     }
 
     setAviso(texto)
-    setFiltroEstado('')
+    limpiarFiltros()
     setSeleccionadoId(resultado.id)
     router.refresh()
   }
@@ -331,6 +371,13 @@ export default function PedidosView({
       ) : (
         <div className="flex flex-col lg:flex-row gap-4 items-start">
           <div className="bg-[#161922] rounded-lg p-2 w-full lg:w-80 shrink-0">
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por número, proveedor o producto"
+              className="w-full bg-[#0f1117] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-blue-500 mb-2"
+            />
             <select
               value={filtroEstado}
               onChange={(e) => setFiltroEstado(e.target.value)}
@@ -343,10 +390,44 @@ export default function PedidosView({
                 </option>
               ))}
             </select>
+            <select
+              value={filtroProveedor}
+              onChange={(e) => setFiltroProveedor(e.target.value)}
+              className="w-full bg-[#0f1117] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-blue-500 mb-2"
+            >
+              <option value="">Todos los proveedores</option>
+              {proveedores.map((pr) => (
+                <option key={pr.id} value={pr.id}>
+                  {pr.nombre}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-gray-400 text-xs px-1 mb-2">
+              <input
+                type="checkbox"
+                checked={soloAtrasados}
+                onChange={(e) => setSoloAtrasados(e.target.checked)}
+              />
+              Solo los atrasados
+            </label>
+            <div className="flex items-center justify-between px-1 mb-2">
+              <span className="text-gray-600 text-xs">
+                {visibles.length} de {pedidos.length}{' '}
+                {pedidos.length === 1 ? 'pedido' : 'pedidos'}
+              </span>
+              {hayFiltros && (
+                <button
+                  onClick={limpiarFiltros}
+                  className="text-xs text-blue-400 hover:text-blue-300"
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
 
             {visibles.length === 0 ? (
               <p className="text-gray-500 text-sm px-2 py-3">
-                No hay pedidos en ese estado.
+                No hay pedidos con esos filtros.
               </p>
             ) : (
               visibles.map((p) => {
@@ -658,7 +739,7 @@ export default function PedidosView({
           proveedores={proveedores}
           pedido={modalPedido.pedido}
           onCreado={(id) => {
-            setFiltroEstado('')
+            limpiarFiltros()
             setSeleccionadoId(id)
           }}
           onCerrar={() => setModalPedido(null)}
