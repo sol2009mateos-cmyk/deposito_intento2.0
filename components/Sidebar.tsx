@@ -18,7 +18,13 @@ const links: { href: string; label: string; icon: string; roles: Rol[] }[] = [
   { href: '/usuarios', label: 'Usuarios', icon: '🔑', roles: ['admin'] },
 ]
 
-export default function Sidebar() {
+type SidebarProps = {
+  // En el celular, el menú se abre y se cierra. En la compu siempre está a la vista.
+  abierto?: boolean
+  onCerrar?: () => void
+}
+
+export default function Sidebar({ abierto = false, onCerrar }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [email, setEmail] = useState<string | null>(null)
@@ -49,13 +55,27 @@ export default function Sidebar() {
   const linksVisibles = rol ? links.filter((l) => l.roles.includes(rol)) : []
 
   return (
-    <aside className="w-64 h-screen sticky top-0 bg-[#161922] border-r border-gray-800 flex flex-col p-4 overflow-y-auto">
-      <div className="flex items-center gap-2 mb-8 px-2">
-        <span className="text-2xl">🏭</span>
-        <div>
-          <h1 className="text-lg font-bold text-white leading-tight">Depósito</h1>
-          <p className="text-xs text-gray-500">Stock y pedidos</p>
+    <aside
+      className={`w-64 h-screen bg-[#161922] border-r border-gray-800 flex flex-col p-4 overflow-y-auto fixed inset-y-0 left-0 z-40 transition-transform duration-200 md:sticky md:top-0 md:z-auto md:translate-x-0 ${
+        abierto ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
+      <div className="flex items-center justify-between mb-8 px-2">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">🏭</span>
+          <div>
+            <h1 className="text-lg font-bold text-white leading-tight">Depósito</h1>
+            <p className="text-xs text-gray-500">Stock y pedidos</p>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={onCerrar}
+          className="md:hidden text-gray-400 hover:text-white text-xl leading-none px-1"
+          aria-label="Cerrar el menú"
+        >
+          ✕
+        </button>
       </div>
 
       <nav className="flex flex-col gap-1 flex-1">
@@ -65,6 +85,7 @@ export default function Sidebar() {
             <Link
               key={link.href}
               href={link.href}
+              onClick={onCerrar}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                 active
                   ? 'bg-blue-600 text-white font-medium'
