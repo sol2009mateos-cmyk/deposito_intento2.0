@@ -7,6 +7,7 @@ import RecibirPedidoModal from '@/components/RecibirPedidoModal'
 import AnularRecepcionModal from '@/components/AnularRecepcionModal'
 import { formatearFecha, formatearNumeroPedido } from '@/lib/pedidos'
 import { formatearFechaHora } from '@/lib/recepcion'
+import { armarCsv, descargarCsv, nombreArchivoCsv } from '@/lib/exportar'
 import type {
   ItemPorRecibir,
   PedidoPorRecibir,
@@ -110,6 +111,85 @@ export default function RecepcionView({
     )
   }
 
+  // Baja a Excel un renglón por producto de cada recepción cargada en pantalla.
+  function exportarRecepciones() {
+    const encabezado = [
+      'Fecha y hora',
+      'Pedido',
+      'Proveedor',
+      'Remito',
+      'Estado',
+      'Código',
+      'Producto',
+      'Pedido (unidades)',
+      'Recibido (unidades)',
+      'Rotas (unidades)',
+      'Faltan (unidades)',
+      'Recibido por',
+      'Notas',
+      'Motivo de anulación',
+    ]
+    const datos = recepciones.flatMap((r) =>
+      recepcionItems
+        .filter((i) => i.recepcion_id === r.id)
+        .map((i) => {
+          const producto = productoPorId.get(i.producto_id)
+          return [
+            formatearFechaHora(r.recibido_en).replace(', ', ' '),
+            formatearNumeroPedido(r.pedido_numero),
+            r.proveedor_nombre,
+            r.nro_remito ?? '',
+            r.anulada_en ? 'Anulada' : 'Recibida',
+            producto?.codigo ?? '',
+            producto?.nombre ?? '',
+            i.pedido_cantidad,
+            i.recibido,
+            i.roto,
+            i.faltante,
+            r.recibido_por_email ?? '',
+            r.notas ?? '',
+            r.motivo_anulacion ?? '',
+          ]
+        })
+    )
+    descargarCsv(nombreArchivoCsv('recepciones'), armarCsv(encabezado, datos))
+  }
+
+  // Baja a Excel un renglón por cada lote que entró al stock en esas recepciones.
+  function exportarLotesRecibidos() {
+    const encabezado = [
+      'Fecha y hora',
+      'Pedido',
+      'Proveedor',
+      'Estado',
+      'Código',
+      'Producto',
+      'Nº de lote',
+      'Vencimiento',
+      'Unidades',
+    ]
+    const datos = recepciones.flatMap((r) =>
+      recepcionLotes
+        .filter((l) => l.recepcion_id === r.id)
+        .map((rl) => {
+          const producto = productoPorId.get(rl.producto_id)
+          const lote = lotePorId.get(rl.lote_id)
+          return [
+            formatearFechaHora(r.recibido_en).replace(', ', ' '),
+            formatearNumeroPedido(r.pedido_numero),
+            r.proveedor_nombre,
+            r.anulada_en ? 'Anulada' : 'Recibida',
+            producto?.codigo ?? '',
+            producto?.nombre ?? '',
+            lote?.nro_lote ?? '',
+            producto?.tiene_vencimiento ? formatearVencimiento(lote?.vencimiento ?? null) : 'Sin vencimiento',
+            rl.cantidad,
+          ]
+        })
+    )
+    descargarCsv(nombreArchivoCsv('recepciones-lotes'), armarCsv(encabezado, datos))
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -155,7 +235,29 @@ export default function RecepcionView({
         )}
       </div>
 
-      <h2 className="text-white font-medium mb-3">Recepciones anteriores</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2 className="text-white font-medium">Recepciones anteriores</h2>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={exportarRecepciones}
+            disabled={recepciones.length === 0}
+            title="Baja a Excel las últimas 50 recepciones, un renglón por producto"
+            className="text-xs bg-[#161922] hover:bg-gray-800 disabled:opacity-40 text-gray-300 px-3 py-1.5 rounded-lg"
+          >
+            ⬇ Excel: recepciones
+          </button>
+          <button
+            type="button"
+            onClick={exportarLotesRecibidos}
+            disabled={recepciones.length === 0}
+            title="Baja a Excel los lotes que entraron en las últimas 50 recepciones"
+            className="text-xs bg-[#161922] hover:bg-gray-800 disabled:opacity-40 text-gray-300 px-3 py-1.5 rounded-lg"
+          >
+            ⬇ Excel: lotes recibidos
+          </button>
+        </div>
+      </div>
 
       {avisoRepo && (
         <div className="bg-green-900/30 border border-green-800 rounded-lg p-3 mb-3 flex items-start justify-between gap-2">
