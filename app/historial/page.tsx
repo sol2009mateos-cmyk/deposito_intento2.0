@@ -71,8 +71,17 @@ export default async function HistorialPage({
     .order('creado_en', { ascending: false })
     .range(desdeFila, desdeFila + POR_PAGINA - 1)
 
-  if (q !== '') {
-    consulta = consulta.or(`nombre.ilike.%${q}%,codigo.ilike.%${q}%`, {
+  // Se busca palabra por palabra (todas tienen que aparecer, en cualquier orden) y sin la
+  // "s" final del plural: "bolsas de consorcio" encuentra "Bolsa de consorcio 80x110".
+  const palabras = q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w !== '')
+    .slice(0, 6)
+    .map((w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w))
+
+  for (const palabra of palabras) {
+    consulta = consulta.or(`nombre.ilike.%${palabra}%,codigo.ilike.%${palabra}%`, {
       referencedTable: 'productos',
     })
   }
