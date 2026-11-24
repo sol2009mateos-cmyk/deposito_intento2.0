@@ -1,6 +1,14 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { formatearStock, formatearVencimiento } from '@/lib/stock'
+import {
+  NOMBRE_TIPO,
+  diaSiguiente,
+  inicioDelDia,
+  leerFiltros,
+  palabrasBusqueda,
+  type TipoMovimiento,
+} from '@/lib/historial'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,20 +16,13 @@ const POR_PAGINA = 50
 
 type Movimiento = {
   id: string
-  tipo: 'carga_inicial' | 'recepcion' | 'salida' | 'ajuste'
+  tipo: TipoMovimiento
   cantidad: number
   motivo: string | null
   usuario_email: string | null
   creado_en: string
   productos: { nombre: string; unidades_por_bulto: number } | null
   lotes: { nro_lote: string | null; vencimiento: string | null } | null
-}
-
-const NOMBRE_TIPO: Record<Movimiento['tipo'], string> = {
-  carga_inicial: 'Carga inicial',
-  recepcion: 'Recepción',
-  salida: 'Salida',
-  ajuste: 'Ajuste',
 }
 
 type Filtros = {
@@ -32,15 +33,6 @@ type Filtros = {
   pagina?: string
 }
 
-const FECHA_OK = /^\d{4}-\d{2}-\d{2}$/
-
-// Suma un día a una fecha "2026-11-17" (sin depender de la zona horaria del servidor).
-function diaSiguiente(fecha: string): string {
-  const [a, m, d] = fecha.split('-').map(Number)
-  const siguiente = new Date(Date.UTC(a, m - 1, d + 1))
-  return siguiente.toISOString().slice(0, 10)
-}
-
 export default async function HistorialPage({
   searchParams,
 }: {
@@ -48,12 +40,7 @@ export default async function HistorialPage({
 }) {
   const supabase = createClient()
 
-  // Se limpian los caracteres que rompen la búsqueda.
-  const q = (searchParams.q ?? '').replace(/[,()%*\\]/g, ' ').trim()
-  const tipo =
-    searchParams.tipo && searchParams.tipo in NOMBRE_TIPO ? searchParams.tipo : ''
-  const desde = searchParams.desde && FECHA_OK.test(searchParams.desde) ? searchParams.desde : ''
-  const hasta = searchParams.hasta && FECHA_OK.test(searchParams.hasta) ? searchParams.hasta : ''
+  const { q, tipo, desde, hasta } = leerFiltros(searchParams)
   const paginaPedida = parseInt(searchParams.pagina ?? '1', 10)
   const pagina = Number.isNaN(paginaPedida) || paginaPedida < 1 ? 1 : paginaPedida
 
@@ -69,16 +56,10 @@ export default async function HistorialPage({
       { count: 'exact' }
     )
     .order('creado_en', { ascending: false })
+    .order('id', { ascending: false })
     .range(desdeFila, desdeFila + POR_PAGINA - 1)
 
-  // Se busca palabra por palabra (todas tienen que aparecer, en cualquier orden) y sin la
-  // "s" final del plural: "bolsas de consorcio" encuentra "Bolsa de consorcio 80x110".
-  const palabras = q
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((w) => w !== '')
-    .slice(0, 6)
-    .map((w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w))
+  const palabras = palabrasBusqueda(q)
 
   for (const palabra of palabras) {
     consulta = consulta.or(`nombre.ilike.%${palabra}%,codigo.ilike.%${palabra}%`, {
@@ -86,9 +67,8 @@ export default async function HistorialPage({
     })
   }
   if (tipo !== '') consulta = consulta.eq('tipo', tipo)
-  // Argentina no usa horario de verano: siempre UTC-3.
-  if (desde !== '') consulta = consulta.gte('creado_en', `${desde}T00:00:00-03:00`)
-  if (hasta !== '') consulta = consulta.lt('creado_en', `${diaSiguiente(hasta)}T00:00:00-03:00`)
+  if (desde !== '') consulta = consulta.gte('creado_en', inicioDelDia(desde))
+  if (hasta !== '') consulta = consulta.lt('creado_en', inicioDelDia(diaSiguiente(hasta)))
 
   const { data, error, count } = await consulta
 
@@ -119,6 +99,15 @@ export default async function HistorialPage({
     const texto = params.toString()
     return texto === '' ? '/historial' : `/historial?${texto}`
   }
+
+  // Misma búsqueda, para bajar todo (no solo esta página) a Excel.
+  const paramsExportar = new URLSearchParams()
+  if (q !== '') paramsExportar.set('q', q)
+  if (tipo !== '') paramsExportar.set('tipo', tipo)
+  if (desde !== '') paramsExportar.set('desde', desde)
+  if (hasta !== '') paramsExportar.set('hasta', hasta)
+  const textoExportar = paramsExportar.toString()
+  const hrefExportar = textoExportar === '' ? '/historial/exportar' : `/historial/exportar?${textoExportar}`
 
   const inputClass =
     'bg-[#0f1117] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-blue-500'
@@ -176,6 +165,13 @@ export default async function HistorialPage({
                 Limpiar
               </Link>
             )}
+            <a
+              href={hrefExportar}
+              title="Baja a Excel todos los movimientos que coinciden con los filtros"
+              className="text-sm bg-[#0f1117] hover:bg-gray-800 text-gray-300 px-4 py-2 rounded-lg"
+            >
+              ⬇ Excel
+            </a>
           </div>
         </div>
       </form>
