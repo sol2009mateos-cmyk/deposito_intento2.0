@@ -5,6 +5,7 @@ import ProductoModal from '@/components/ProductoModal'
 import CargaInicialModal from '@/components/CargaInicialModal'
 import SalidaModal from '@/components/SalidaModal'
 import AjusteModal from '@/components/AjusteModal'
+import { armarCsv, descargarCsv, nombreArchivoCsv } from '@/lib/exportar'
 import {
   formatearStock,
   formatearVencimiento,
@@ -73,6 +74,70 @@ export default function InventarioView({
       })
   }, [productos, lotes, busqueda, categoriaFiltro, mostrarInactivos])
 
+  // Baja a Excel los productos que se están viendo (respeta la búsqueda y los filtros).
+  function exportarProductos() {
+    const encabezado = [
+      'Código',
+      'Producto',
+      'Categoría',
+      'Estado',
+      'Unidades por bulto',
+      'Stock en unidades',
+      'Bultos completos',
+      'Unidades sueltas',
+      'Stock mínimo (unidades)',
+      'Bajo el mínimo',
+      'Próximo vencimiento',
+    ]
+    const datos = filas.map(({ producto: p, total, proximo }) => {
+      const porBulto = p.unidades_por_bulto
+      return [
+        p.codigo ?? '',
+        p.nombre,
+        nombreCategoria.get(p.categoria_id) ?? '',
+        p.activo ? 'Activo' : 'Inactivo',
+        porBulto,
+        total,
+        porBulto > 1 ? Math.floor(total / porBulto) : '',
+        porBulto > 1 ? total % porBulto : total,
+        p.stock_minimo,
+        p.stock_minimo === null ? '' : total < p.stock_minimo ? 'Sí' : 'No',
+        p.tiene_vencimiento ? formatearVencimiento(proximo) : 'Sin vencimiento',
+      ]
+    })
+    descargarCsv(nombreArchivoCsv('inventario'), armarCsv(encabezado, datos))
+  }
+
+  // Baja a Excel un renglón por lote, de los productos que se están viendo.
+  function exportarLotes() {
+    const encabezado = [
+      'Código',
+      'Producto',
+      'Categoría',
+      'Nº de lote',
+      'Vencimiento',
+      'Unidades',
+      'Bultos completos',
+      'Unidades sueltas',
+    ]
+    const datos = filas.flatMap(({ producto: p, lotes: lotesProducto }) =>
+      lotesProducto.map((l) => {
+        const porBulto = p.unidades_por_bulto
+        return [
+          p.codigo ?? '',
+          p.nombre,
+          nombreCategoria.get(p.categoria_id) ?? '',
+          l.nro_lote ?? '',
+          p.tiene_vencimiento ? formatearVencimiento(l.vencimiento) : 'Sin vencimiento',
+          l.cantidad_actual,
+          porBulto > 1 ? Math.floor(l.cantidad_actual / porBulto) : '',
+          porBulto > 1 ? l.cantidad_actual % porBulto : l.cantidad_actual,
+        ]
+      })
+    )
+    descargarCsv(nombreArchivoCsv('inventario-lotes'), armarCsv(encabezado, datos))
+  }
+
   return (
     <div>
       <div className="flex items-start justify-between mb-6">
@@ -120,6 +185,26 @@ export default function InventarioView({
           />
           Mostrar inactivos
         </label>
+        <div className="flex flex-wrap gap-2 sm:ml-auto">
+          <button
+            type="button"
+            onClick={exportarProductos}
+            disabled={filas.length === 0}
+            title="Baja a Excel los productos que se ven en pantalla"
+            className="text-sm bg-[#161922] hover:bg-gray-800 disabled:opacity-40 text-gray-300 px-3 py-2 rounded-lg"
+          >
+            ⬇ Excel: productos
+          </button>
+          <button
+            type="button"
+            onClick={exportarLotes}
+            disabled={filas.length === 0}
+            title="Baja a Excel un renglón por lote, con su vencimiento"
+            className="text-sm bg-[#161922] hover:bg-gray-800 disabled:opacity-40 text-gray-300 px-3 py-2 rounded-lg"
+          >
+            ⬇ Excel: lotes
+          </button>
+        </div>
       </div>
 
       <div className="bg-[#161922] rounded-lg p-4 overflow-x-auto">
