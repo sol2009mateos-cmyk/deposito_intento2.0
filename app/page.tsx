@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { obtenerRol } from '@/lib/roles'
+import { traerTodo } from '@/lib/traerTodo'
 import {
   DIAS_ALERTA_VENCIMIENTO,
   calcularBajoStock,
@@ -38,14 +39,24 @@ export default async function Dashboard() {
   const supabase = createClient()
 
   const [productos, lotes, pendientes] = await Promise.all([
-    supabase
-      .from('productos')
-      .select(
-        'id, nombre, codigo, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
-      ),
-    supabase
-      .from('lotes')
-      .select('id, producto_id, vencimiento, nro_lote, cantidad_actual'),
+    traerTodo<Producto>((desde, hasta) =>
+      supabase
+        .from('productos')
+        .select(
+          'id, nombre, codigo, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
+        )
+        .order('id')
+        .range(desde, hasta)
+    ),
+    // Solo los lotes con stock: los que quedaron en cero no cuentan para el resumen.
+    traerTodo<Lote>((desde, hasta) =>
+      supabase
+        .from('lotes')
+        .select('id, producto_id, vencimiento, nro_lote, cantidad_actual')
+        .gt('cantidad_actual', 0)
+        .order('id')
+        .range(desde, hasta)
+    ),
     supabase.rpc('pedidos_por_recibir'),
   ])
 
