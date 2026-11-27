@@ -77,7 +77,8 @@ export default function InventarioView({
         (p) =>
           texto === '' ||
           p.nombre.toLowerCase().includes(texto) ||
-          (p.codigo ?? '').toLowerCase().includes(texto)
+          (p.codigo ?? '').toLowerCase().includes(texto) ||
+          (p.codigo_barras ?? '').toLowerCase().includes(texto)
       )
       .map((p) => {
         const lotesProducto = lotesPorProducto.get(p.id) ?? []
