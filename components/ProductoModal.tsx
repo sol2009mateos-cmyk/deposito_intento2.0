@@ -21,6 +21,7 @@ export default function ProductoModal({ categorias, producto, onCerrar }: Props)
   const [lista, setLista] = useState<Categoria[]>(categorias)
   const [nombre, setNombre] = useState(producto?.nombre ?? '')
   const [codigo, setCodigo] = useState(producto?.codigo ?? '')
+  const [codigoBarras, setCodigoBarras] = useState(producto?.codigo_barras ?? '')
   const [categoriaId, setCategoriaId] = useState(producto?.categoria_id ?? '')
   const [unidadesPorBulto, setUnidadesPorBulto] = useState(
     String(producto?.unidades_por_bulto ?? 1)
@@ -92,6 +93,7 @@ export default function ProductoModal({ categorias, producto, onCerrar }: Props)
     const datos = {
       p_nombre: nombre,
       p_codigo: codigo.trim() === '' ? null : codigo.trim(),
+      p_codigo_barras: codigoBarras.trim() === '' ? null : codigoBarras.trim(),
       p_categoria_id: categoriaId === '' ? null : categoriaId,
       p_unidades_por_bulto: porBulto,
       p_tiene_vencimiento: tieneVencimiento,
@@ -143,6 +145,21 @@ export default function ProductoModal({ categorias, producto, onCerrar }: Props)
           type="text"
           value={codigo}
           onChange={(e) => setCodigo(e.target.value)}
+          className={`${inputClass} mb-4`}
+        />
+
+        <label className="block text-gray-400 text-sm mb-1">
+          Código de barras (opcional)
+        </label>
+        <input
+          type="text"
+          value={codigoBarras}
+          onChange={(e) => setCodigoBarras(e.target.value)}
+          onKeyDown={(e) => {
+            // La pistola lectora manda un Enter al terminar: no tiene que guardar el formulario.
+            if (e.key === 'Enter') e.preventDefault()
+          }}
+          placeholder="Podés escanearlo con la pistola"
           className={`${inputClass} mb-4`}
         />
 
