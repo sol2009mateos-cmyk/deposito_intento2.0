@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { obtenerRol } from '@/lib/roles'
+import { traerTodo } from '@/lib/traerTodo'
 import ProveedoresView from '@/components/ProveedoresView'
 import type { ItemCatalogo, Proveedor } from '@/lib/proveedores'
 import type { CambioPrecio } from '@/lib/precios'
@@ -30,21 +31,32 @@ export default async function ProveedoresPage() {
         'id, nombre, telefono, email, notas, activo, plazo_entrega_dias, monto_minimo, cuit, condicion_pago'
       )
       .order('nombre'),
-    supabase
-      .from('catalogo_proveedor')
-      .select('id, proveedor_id, producto_id, precio, por_bulto, precio_unidad'),
-    supabase
-      .from('productos')
-      .select(
-        'id, nombre, codigo, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
-      )
-      .order('nombre'),
-    supabase
-      .from('precios_historial')
-      .select(
-        'id, proveedor_id, producto_id, precio, por_bulto, precio_unidad, precio_unidad_anterior, cambiado_en, cambiado_por_email'
-      )
-      .order('orden', { ascending: false }),
+    traerTodo<ItemCatalogo>((desde, hasta) =>
+      supabase
+        .from('catalogo_proveedor')
+        .select('id, proveedor_id, producto_id, precio, por_bulto, precio_unidad')
+        .order('id')
+        .range(desde, hasta)
+    ),
+    traerTodo<Producto>((desde, hasta) =>
+      supabase
+        .from('productos')
+        .select(
+          'id, nombre, codigo, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
+        )
+        .order('nombre')
+        .order('id')
+        .range(desde, hasta)
+    ),
+    traerTodo<CambioPrecio>((desde, hasta) =>
+      supabase
+        .from('precios_historial')
+        .select(
+          'id, proveedor_id, producto_id, precio, por_bulto, precio_unidad, precio_unidad_anterior, cambiado_en, cambiado_por_email'
+        )
+        .order('orden', { ascending: false })
+        .range(desde, hasta)
+    ),
   ])
 
   const error = proveedores.error ?? catalogo.error ?? productos.error ?? historial.error
