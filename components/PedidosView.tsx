@@ -37,6 +37,8 @@ type Props = {
   seleccionInicialId: string | null
 }
 
+const TANDA_LISTA = 50
+
 function fechaDelPedido(fecha: string): string {
   return new Date(fecha).toLocaleDateString('es-AR', {
     timeZone: 'America/Argentina/Buenos_Aires',
@@ -122,6 +124,13 @@ export default function PedidosView({
     itemsPorPedido,
     productoPorId,
   ])
+
+  // La lista de la izquierda muestra de a 50; "Mostrar más" suma otros 50.
+  // Si cambia algún filtro o la búsqueda, vuelve a empezar desde los primeros 50.
+  const firmaFiltros = [filtroEstado, filtroProveedor, soloAtrasados, busqueda].join('|')
+  const [tanda, setTanda] = useState({ firma: '', cantidad: TANDA_LISTA })
+  const cantidadMostrada = tanda.firma === firmaFiltros ? tanda.cantidad : TANDA_LISTA
+  const visiblesRecortados = visibles.slice(0, cantidadMostrada)
 
   const hayFiltros =
     filtroEstado !== '' || filtroProveedor !== '' || soloAtrasados || busqueda.trim() !== ''
@@ -430,7 +439,7 @@ export default function PedidosView({
                 No hay pedidos con esos filtros.
               </p>
             ) : (
-              visibles.map((p) => {
+              visiblesRecortados.map((p) => {
                 const activoSel = seleccionado?.id === p.id
                 const total = totalPedido(itemsPorPedido.get(p.id) ?? [])
                 const atrasado = estaAtrasado(p.estado, p.fecha_estimada)
@@ -469,6 +478,18 @@ export default function PedidosView({
                   </button>
                 )
               })
+            )}
+
+            {visibles.length > cantidadMostrada && (
+              <button
+                type="button"
+                onClick={() =>
+                  setTanda({ firma: firmaFiltros, cantidad: cantidadMostrada + TANDA_LISTA })
+                }
+                className="w-full text-xs bg-[#0f1117] hover:bg-gray-800 text-gray-300 px-3 py-2 rounded-lg mt-1"
+              >
+                Mostrar más ({visibles.length - cantidadMostrada} restantes)
+              </button>
             )}
           </div>
 
