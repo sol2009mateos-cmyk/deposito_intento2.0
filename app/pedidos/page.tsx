@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { obtenerRol } from '@/lib/roles'
+import { traerTodo } from '@/lib/traerTodo'
 import PedidosView from '@/components/PedidosView'
 import type { ItemPedido, Pedido } from '@/lib/pedidos'
 import type { ItemCatalogo, Proveedor } from '@/lib/proveedores'
@@ -28,30 +29,46 @@ export default async function PedidosPage({
   const supabase = createClient()
 
   const [pedidos, items, proveedores, catalogo, productos] = await Promise.all([
-    supabase
-      .from('pedidos')
-      .select(
-        'id, numero, proveedor_id, estado, fecha_pedido, fecha_estimada, notas, creado_por_email, confirmado_en, confirmado_por_email, cancelado_en, cancelado_por_email, motivo_cancelacion'
-      )
-      .order('numero', { ascending: false }),
-    supabase
-      .from('pedido_items')
-      .select('id, pedido_id, producto_id, cantidad, precio_unidad'),
+    traerTodo<Pedido>((desde, hasta) =>
+      supabase
+        .from('pedidos')
+        .select(
+          'id, numero, proveedor_id, estado, fecha_pedido, fecha_estimada, notas, creado_por_email, confirmado_en, confirmado_por_email, cancelado_en, cancelado_por_email, motivo_cancelacion'
+        )
+        .order('numero', { ascending: false })
+        .order('id')
+        .range(desde, hasta)
+    ),
+    traerTodo<ItemPedido>((desde, hasta) =>
+      supabase
+        .from('pedido_items')
+        .select('id, pedido_id, producto_id, cantidad, precio_unidad')
+        .order('id')
+        .range(desde, hasta)
+    ),
     supabase
       .from('proveedores')
       .select(
         'id, nombre, telefono, email, notas, activo, plazo_entrega_dias, monto_minimo, cuit, condicion_pago'
       )
       .order('nombre'),
-    supabase
-      .from('catalogo_proveedor')
-      .select('id, proveedor_id, producto_id, precio, por_bulto, precio_unidad'),
-    supabase
-      .from('productos')
-      .select(
-        'id, nombre, codigo, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
-      )
-      .order('nombre'),
+    traerTodo<ItemCatalogo>((desde, hasta) =>
+      supabase
+        .from('catalogo_proveedor')
+        .select('id, proveedor_id, producto_id, precio, por_bulto, precio_unidad')
+        .order('id')
+        .range(desde, hasta)
+    ),
+    traerTodo<Producto>((desde, hasta) =>
+      supabase
+        .from('productos')
+        .select(
+          'id, nombre, codigo, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
+        )
+        .order('nombre')
+        .order('id')
+        .range(desde, hasta)
+    ),
   ])
 
   const error =
