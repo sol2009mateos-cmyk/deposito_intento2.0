@@ -21,6 +21,8 @@ type Props = {
   puedeEditar: boolean
 }
 
+const TANDA_TABLA = 50
+
 // Ordena los lotes por vencimiento: primero el que vence antes, sin vencimiento al final.
 function porVencimiento(a: Lote, b: Lote) {
   if (a.vencimiento === b.vencimiento) return 0
@@ -52,6 +54,19 @@ export default function InventarioView({
     return mapa
   }, [categorias])
 
+  // Los lotes con stock, agrupados por producto (así no se recorren todos por cada producto).
+  const lotesPorProducto = useMemo(() => {
+    const mapa = new Map<string, Lote[]>()
+    lotes.forEach((l) => {
+      if (l.cantidad_actual <= 0) return
+      const lista = mapa.get(l.producto_id)
+      if (lista) lista.push(l)
+      else mapa.set(l.producto_id, [l])
+    })
+    mapa.forEach((lista) => lista.sort(porVencimiento))
+    return mapa
+  }, [lotes])
+
   const filas = useMemo(() => {
     const texto = busqueda.trim().toLowerCase()
 
@@ -65,14 +80,19 @@ export default function InventarioView({
           (p.codigo ?? '').toLowerCase().includes(texto)
       )
       .map((p) => {
-        const lotesProducto = lotes
-          .filter((l) => l.producto_id === p.id && l.cantidad_actual > 0)
-          .sort(porVencimiento)
+        const lotesProducto = lotesPorProducto.get(p.id) ?? []
         const total = lotesProducto.reduce((suma, l) => suma + l.cantidad_actual, 0)
         const proximo = lotesProducto.find((l) => l.vencimiento)?.vencimiento ?? null
         return { producto: p, lotes: lotesProducto, total, proximo }
       })
-  }, [productos, lotes, busqueda, categoriaFiltro, mostrarInactivos])
+  }, [productos, lotesPorProducto, busqueda, categoriaFiltro, mostrarInactivos])
+
+  // La tabla muestra de a 50; "Mostrar más" suma otros 50. Si cambia la búsqueda o un filtro,
+  // vuelve a empezar. Los Excel siempre bajan todo lo filtrado, no solo lo que se ve.
+  const firmaFiltros = [busqueda, categoriaFiltro, mostrarInactivos].join('|')
+  const [tanda, setTanda] = useState({ firma: '', cantidad: TANDA_TABLA })
+  const cantidadMostrada = tanda.firma === firmaFiltros ? tanda.cantidad : TANDA_TABLA
+  const filasVisibles = filas.slice(0, cantidadMostrada)
 
   // Baja a Excel los productos que se están viendo (respeta la búsqueda y los filtros).
   function exportarProductos() {
@@ -228,7 +248,7 @@ export default function InventarioView({
               </tr>
             </thead>
             <tbody>
-              {filas.map(({ producto: p, lotes: lotesProducto, total, proximo }) => (
+              {filasVisibles.map(({ producto: p, lotes: lotesProducto, total, proximo }) => (
                 <Fragment key={p.id}>
                   <tr
                     onClick={() => setExpandido(expandido === p.id ? null : p.id)}
@@ -333,6 +353,26 @@ export default function InventarioView({
               ))}
             </tbody>
           </table>
+        )}
+
+        {filas.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-3">
+            <span className="text-gray-600 text-xs">
+              Mostrando {Math.min(cantidadMostrada, filas.length)} de {filas.length}{' '}
+              {filas.length === 1 ? 'producto' : 'productos'}
+            </span>
+            {filas.length > cantidadMostrada && (
+              <button
+                type="button"
+                onClick={() =>
+                  setTanda({ firma: firmaFiltros, cantidad: cantidadMostrada + TANDA_TABLA })
+                }
+                className="text-xs bg-[#0f1117] hover:bg-gray-800 text-gray-300 px-3 py-2 rounded-lg"
+              >
+                Mostrar más ({filas.length - cantidadMostrada} restantes)
+              </button>
+            )}
+          </div>
         )}
       </div>
 
