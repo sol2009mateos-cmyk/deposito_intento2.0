@@ -43,7 +43,7 @@ export default async function Dashboard() {
       supabase
         .from('productos')
         .select(
-          'id, nombre, codigo, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
+          'id, nombre, codigo, codigo_barras, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
         )
         .order('id')
         .range(desde, hasta)
