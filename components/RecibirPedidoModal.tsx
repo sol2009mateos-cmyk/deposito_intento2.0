@@ -148,18 +148,23 @@ export default function RecibirPedidoModal({ pedido, items, productos, onCerrar 
     })
   }
 
-  // Busca por código (o nombre). Con Enter (lo que hace el lector de códigos) salta al producto.
+  // Busca por código de barras, código (o nombre). Con Enter (lo que hace el lector de códigos) salta al producto.
   function buscarProducto() {
     const texto = busqueda.trim().toLowerCase()
     if (texto === '') return
 
     const coincidencias = filas.filter(
       (f) =>
+        (f.producto.codigo_barras ?? '').toLowerCase() === texto ||
         (f.producto.codigo ?? '').toLowerCase() === texto ||
         f.producto.nombre.toLowerCase().includes(texto) ||
         (f.producto.codigo ?? '').toLowerCase().includes(texto)
     )
-    const exacta = coincidencias.find((f) => (f.producto.codigo ?? '').toLowerCase() === texto)
+    const exacta = coincidencias.find(
+      (f) =>
+        (f.producto.codigo_barras ?? '').toLowerCase() === texto ||
+        (f.producto.codigo ?? '').toLowerCase() === texto
+    )
     const elegida = exacta ?? (coincidencias.length === 1 ? coincidencias[0] : null)
 
     if (!elegida) {
@@ -212,7 +217,8 @@ export default function RecibirPedidoModal({ pedido, items, productos, onCerrar 
       : filas.filter(
           (f) =>
             f.producto.nombre.toLowerCase().includes(textoFiltro) ||
-            (f.producto.codigo ?? '').toLowerCase().includes(textoFiltro)
+            (f.producto.codigo ?? '').toLowerCase().includes(textoFiltro) ||
+            (f.producto.codigo_barras ?? '').toLowerCase().includes(textoFiltro)
         )
 
   async function confirmarRecepcion() {
@@ -407,7 +413,7 @@ export default function RecibirPedidoModal({ pedido, items, productos, onCerrar 
                     buscarProducto()
                   }
                 }}
-                placeholder="Escaneá o escribí el código del producto y apretá Enter"
+                placeholder="Escaneá el código de barras o escribí el código y apretá Enter"
                 className={`${inputClass} flex-1 min-w-[240px]`}
               />
               <button
