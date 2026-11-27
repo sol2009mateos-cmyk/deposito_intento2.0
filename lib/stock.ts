@@ -7,6 +7,7 @@ export type Producto = {
   id: string
   nombre: string
   codigo: string | null
+  codigo_barras: string | null
   categoria_id: string
   unidades_por_bulto: number
   tiene_vencimiento: boolean
