@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { obtenerRol } from '@/lib/roles'
+import { traerTodo } from '@/lib/traerTodo'
 import QuePedirView from '@/components/QuePedirView'
 import { calcularBajoStock, stockPorProducto } from '@/lib/reposicion'
 import type { ItemCatalogo, Proveedor } from '@/lib/proveedores'
@@ -24,24 +25,46 @@ export default async function QuePedirPage() {
   const supabase = createClient()
 
   const [productos, lotes, catalogo, proveedores, pedidos, items] = await Promise.all([
-    supabase
-      .from('productos')
-      .select(
-        'id, nombre, codigo, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
-      )
-      .order('nombre'),
-    supabase
-      .from('lotes')
-      .select('id, producto_id, vencimiento, nro_lote, cantidad_actual'),
-    supabase
-      .from('catalogo_proveedor')
-      .select('id, proveedor_id, producto_id, precio, por_bulto, precio_unidad'),
+    traerTodo<Producto>((desde, hasta) =>
+      supabase
+        .from('productos')
+        .select(
+          'id, nombre, codigo, categoria_id, unidades_por_bulto, tiene_vencimiento, stock_minimo, activo'
+        )
+        .order('nombre')
+        .order('id')
+        .range(desde, hasta)
+    ),
+    // Solo los lotes con stock: los que quedaron en cero no cuentan.
+    traerTodo<Lote>((desde, hasta) =>
+      supabase
+        .from('lotes')
+        .select('id, producto_id, vencimiento, nro_lote, cantidad_actual')
+        .gt('cantidad_actual', 0)
+        .order('id')
+        .range(desde, hasta)
+    ),
+    traerTodo<ItemCatalogo>((desde, hasta) =>
+      supabase
+        .from('catalogo_proveedor')
+        .select('id, proveedor_id, producto_id, precio, por_bulto, precio_unidad')
+        .order('id')
+        .range(desde, hasta)
+    ),
     supabase
       .from('proveedores')
       .select('id, nombre, telefono, email, notas, activo')
       .order('nombre'),
     supabase.from('pedidos').select('id, estado').in('estado', ['borrador', 'pendiente']),
-    supabase.from('pedido_items').select('pedido_id, producto_id, cantidad'),
+    // Solo los productos de pedidos en borrador o pendientes (los demás no importan acá).
+    traerTodo<{ pedido_id: string; producto_id: string; cantidad: number }>((desde, hasta) =>
+      supabase
+        .from('pedido_items')
+        .select('pedido_id, producto_id, cantidad, pedidos!inner(estado)')
+        .in('pedidos.estado', ['borrador', 'pendiente'])
+        .order('id')
+        .range(desde, hasta)
+    ),
   ])
 
   const error =
